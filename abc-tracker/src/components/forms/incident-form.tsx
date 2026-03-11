@@ -30,6 +30,8 @@ import type { BehaviorFunction, ConsequenceType, IncidentSetting } from '@/lib/t
 
 const STEPS = ['When & Where', 'Antecedent', 'Behavior', 'Consequence', 'Context & Notes', 'Review']
 const DRAFT_KEY = 'abc-incident-draft-v1'
+const DEFAULT_ANTECEDENT_PREFIX = 'default-antecedent:'
+const DEFAULT_CONSEQUENCE_PREFIX = 'default-consequence:'
 
 const initialValues: IncidentFormValues = {
   occurred_at: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
@@ -94,6 +96,30 @@ export function IncidentForm() {
     [behaviors, form],
   )
 
+  const antecedentOptions = useMemo(() => {
+    const existingLabels = new Set(antecedents.map((item) => item.label.toLowerCase()))
+    const defaultOnly = DEFAULT_ANTECEDENTS.filter((item) => !existingLabels.has(item.label.toLowerCase())).map((item) => ({
+      id: `${DEFAULT_ANTECEDENT_PREFIX}${item.label}`,
+      label: item.label,
+      category: item.category,
+      is_custom: false,
+      created_at: '',
+    }))
+    return [...antecedents, ...defaultOnly]
+  }, [antecedents])
+
+  const consequenceOptions = useMemo(() => {
+    const existingLabels = new Set(consequences.map((item) => item.label.toLowerCase()))
+    const defaultOnly = DEFAULT_CONSEQUENCES.filter((item) => !existingLabels.has(item.label.toLowerCase())).map((item) => ({
+      id: `${DEFAULT_CONSEQUENCE_PREFIX}${item.label}`,
+      label: item.label,
+      type: item.type as ConsequenceType,
+      is_custom: false,
+      created_at: '',
+    }))
+    return [...consequences, ...defaultOnly]
+  }, [consequences])
+
   const nextStep = async () => {
     const stepFields: Record<number, (keyof IncidentFormValues)[]> = {
       0: ['occurred_at', 'setting', 'duration_minutes', 'duration_seconds_only'],
@@ -111,6 +137,100 @@ export function IncidentForm() {
 
   const saveIncident = async (resetAfterSave = false) => {
     const values = form.getValues()
+
+    const normalizeAntecedentIds = async (selectedIds: string[]) => {
+      const knownById = new Map(antecedents.map((item) => [item.id, item]))
+      const knownByLabel = new Map(antecedents.map((item) => [item.label.toLowerCase(), item.id]))
+      const resolved = new Set<string>()
+
+      for (const selectedId of selectedIds) {
+        if (knownById.has(selectedId)) {
+          resolved.add(selectedId)
+          continue
+        }
+
+        const normalizedLabel = selectedId.startsWith(DEFAULT_ANTECEDENT_PREFIX)
+          ? selectedId.slice(DEFAULT_ANTECEDENT_PREFIX.length)
+          : selectedId
+
+        const existingId = knownByLabel.get(normalizedLabel.toLowerCase())
+        if (existingId) {
+          resolved.add(existingId)
+          continue
+        }
+
+        const defaultOption = DEFAULT_ANTECEDENTS.find((item) => item.label.toLowerCase() === normalizedLabel.toLowerCase())
+        if (!defaultOption) {
+          continue
+        }
+
+        const { data, error } = await createAntecedent({
+          label: defaultOption.label,
+          category: defaultOption.category,
+        })
+
+        if (error || !data) {
+          throw new Error(error?.message ?? `Unable to create antecedent: ${defaultOption.label}`)
+        }
+
+        resolved.add(data.id)
+      }
+
+      return [...resolved]
+    }
+
+    const normalizeConsequenceIds = async (selectedIds: string[]) => {
+      const knownById = new Map(consequences.map((item) => [item.id, item]))
+      const knownByLabel = new Map(consequences.map((item) => [item.label.toLowerCase(), item.id]))
+      const resolved = new Set<string>()
+
+      for (const selectedId of selectedIds) {
+        if (knownById.has(selectedId)) {
+          resolved.add(selectedId)
+          continue
+        }
+
+        const normalizedLabel = selectedId.startsWith(DEFAULT_CONSEQUENCE_PREFIX)
+          ? selectedId.slice(DEFAULT_CONSEQUENCE_PREFIX.length)
+          : selectedId
+
+        const existingId = knownByLabel.get(normalizedLabel.toLowerCase())
+        if (existingId) {
+          resolved.add(existingId)
+          continue
+        }
+
+        const defaultOption = DEFAULT_CONSEQUENCES.find((item) => item.label.toLowerCase() === normalizedLabel.toLowerCase())
+        if (!defaultOption) {
+          continue
+        }
+
+        const { data, error } = await createConsequence({
+          label: defaultOption.label,
+          type: defaultOption.type as ConsequenceType,
+        })
+
+        if (error || !data) {
+          throw new Error(error?.message ?? `Unable to create consequence: ${defaultOption.label}`)
+        }
+
+        resolved.add(data.id)
+      }
+
+      return [...resolved]
+    }
+
+    let normalizedAntecedentIds: string[]
+    let normalizedConsequenceIds: string[]
+
+    try {
+      normalizedAntecedentIds = await normalizeAntecedentIds(values.antecedent_ids)
+      normalizedConsequenceIds = await normalizeConsequenceIds(values.consequence_ids)
+    } catch (normalizationError) {
+      toast.error(normalizationError instanceof Error ? normalizationError.message : 'Unable to save incident options.')
+      return
+    }
+
     const durationMinutes = Number(values.duration_minutes ?? 0)
     const durationSecondsOnly = Number(values.duration_seconds_only ?? 0)
     const durationSeconds = durationMinutes * 60 + durationSecondsOnly
@@ -120,12 +240,12 @@ export function IncidentForm() {
       duration_seconds: durationSeconds > 0 ? durationSeconds : null,
       setting: values.setting as IncidentSetting,
       setting_detail: values.setting_detail || null,
-      antecedent_ids: values.antecedent_ids,
+      antecedent_ids: normalizedAntecedentIds,
       antecedent_notes: values.antecedent_notes || null,
       behavior_id: values.behavior_id,
       behavior_notes: values.behavior_notes || null,
       severity: values.severity,
-      consequence_ids: values.consequence_ids,
+      consequence_ids: normalizedConsequenceIds,
       consequence_notes: values.consequence_notes || null,
       hypothesized_function: values.hypothesized_function as BehaviorFunction,
       parent_raw_notes: values.parent_raw_notes || null,
@@ -141,7 +261,16 @@ export function IncidentForm() {
       return
     }
 
+    if (normalizedAntecedentIds.length !== values.antecedent_ids.length) {
+      form.setValue('antecedent_ids', normalizedAntecedentIds, { shouldDirty: true })
+    }
+
+    if (normalizedConsequenceIds.length !== values.consequence_ids.length) {
+      form.setValue('consequence_ids', normalizedConsequenceIds, { shouldDirty: true })
+    }
+
     toast.success('Incident saved successfully.')
+    await Promise.all([refetchAntecedents(), refetchConsequences()])
     localStorage.removeItem(DRAFT_KEY)
 
     if (resetAfterSave) {
@@ -298,7 +427,7 @@ export function IncidentForm() {
           <div className="space-y-4">
             <p className="text-sm text-slate-600">What was happening right before the behavior?</p>
             <div className="flex flex-wrap gap-2">
-              {[...antecedents, ...DEFAULT_ANTECEDENTS.map((item) => ({ ...item, id: item.label, is_custom: false, created_at: '' }))].map((item) => (
+              {antecedentOptions.map((item) => (
                 <Button
                   key={item.id}
                   type="button"
@@ -352,10 +481,7 @@ export function IncidentForm() {
           <div className="space-y-4">
             <p className="text-sm text-slate-600">How did you and others respond?</p>
             <div className="flex flex-wrap gap-2">
-              {[
-                ...consequences,
-                ...DEFAULT_CONSEQUENCES.map((item) => ({ ...item, id: item.label, is_custom: false, created_at: '' })),
-              ].map((item) => (
+              {consequenceOptions.map((item) => (
                 <Button
                   key={item.id}
                   type="button"
