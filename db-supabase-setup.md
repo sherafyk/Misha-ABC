@@ -23,8 +23,8 @@ Go to **SQL Editor** in the Supabase dashboard (left sidebar), click **"New quer
 
 ```sql
 -- ============================================================
--- ABC Behavior Tracker — Full Database Schema
--- Run this entire script in the Supabase SQL Editor
+-- ABC Behavior Tracker — Full Database Schema (revised)
+-- Updated to avoid immutable index error on TIMESTAMPTZ -> DATE
 -- ============================================================
 
 -- Enable UUID generation
@@ -33,17 +33,27 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ============================================================
 -- ENUMS
 -- ============================================================
-
 CREATE TYPE behavior_function AS ENUM (
-  'sensory', 'escape', 'attention', 'tangible', 'unknown'
+  'sensory',
+  'escape',
+  'attention',
+  'tangible',
+  'unknown'
 );
 
 CREATE TYPE behavior_severity AS ENUM (
-  'low', 'medium', 'high', 'crisis'
+  'low',
+  'medium',
+  'high',
+  'crisis'
 );
 
 CREATE TYPE incident_setting AS ENUM (
-  'home', 'school', 'community', 'therapy', 'other'
+  'home',
+  'school',
+  'community',
+  'therapy',
+  'other'
 );
 
 CREATE TYPE consequence_type AS ENUM (
@@ -57,13 +67,26 @@ CREATE TYPE consequence_type AS ENUM (
 );
 
 CREATE TYPE ai_note_type AS ENUM (
-  'incident', 'daily_summary', 'progress_report', 'general'
+  'incident',
+  'daily_summary',
+  'progress_report',
+  'general'
 );
+
+-- ============================================================
+-- TRIGGER FUNCTION
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.update_row_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
 -- ============================================================
 -- TABLE: child_profile (single row — one child)
 -- ============================================================
-
 CREATE TABLE child_profile (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   first_name TEXT NOT NULL,
@@ -79,24 +102,14 @@ CREATE TABLE child_profile (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Trigger to auto-update updated_at
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
 CREATE TRIGGER update_child_profile_updated_at
-  BEFORE UPDATE ON child_profile
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
+BEFORE UPDATE ON child_profile
+FOR EACH ROW
+EXECUTE FUNCTION public.update_row_updated_at();
 
 -- ============================================================
 -- TABLE: behavior_definitions
 -- ============================================================
-
 CREATE TABLE behavior_definitions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT NOT NULL,
@@ -112,12 +125,12 @@ CREATE TABLE behavior_definitions (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_behavior_definitions_active ON behavior_definitions(is_active);
+CREATE INDEX idx_behavior_definitions_active
+ON behavior_definitions(is_active);
 
 -- ============================================================
 -- TABLE: antecedent_options
 -- ============================================================
-
 CREATE TABLE antecedent_options (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   label TEXT NOT NULL,
@@ -128,12 +141,12 @@ CREATE TABLE antecedent_options (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_antecedent_options_active ON antecedent_options(is_active);
+CREATE INDEX idx_antecedent_options_active
+ON antecedent_options(is_active);
 
 -- ============================================================
 -- TABLE: consequence_options
 -- ============================================================
-
 CREATE TABLE consequence_options (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   label TEXT NOT NULL,
@@ -144,64 +157,80 @@ CREATE TABLE consequence_options (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_consequence_options_active ON consequence_options(is_active);
+CREATE INDEX idx_consequence_options_active
+ON consequence_options(is_active);
 
 -- ============================================================
 -- TABLE: incidents (core ABC data)
 -- ============================================================
-
 CREATE TABLE incidents (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  -- Convert timestamp to Los Angeles local calendar day
+  occurred_date DATE GENERATED ALWAYS AS (
+    (occurred_at AT TIME ZONE 'America/Los_Angeles')::date
+  ) STORED,
+
   duration_seconds INTEGER,
   setting incident_setting NOT NULL DEFAULT 'home',
   setting_detail TEXT,
-  
+
   -- Behavior
   behavior_id UUID NOT NULL REFERENCES behavior_definitions(id) ON DELETE RESTRICT,
   behavior_notes TEXT,
   severity behavior_severity NOT NULL DEFAULT 'medium',
-  
-  -- Antecedent (notes — linked antecedents in junction table)
+
+  -- Antecedent
   antecedent_notes TEXT,
-  
-  -- Consequence (notes — linked consequences in junction table)
+
+  -- Consequence
   consequence_notes TEXT,
-  
+
   -- Analysis
   hypothesized_function behavior_function DEFAULT 'unknown',
-  
+
   -- Context
   people_present TEXT,
   environmental_factors TEXT,
   mood_before TEXT,
-  
+
   -- Notes
   parent_raw_notes TEXT,
   ai_formatted_notes TEXT,
-  
+
   -- Metadata
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TRIGGER update_incidents_updated_at
-  BEFORE UPDATE ON incidents
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
+BEFORE UPDATE ON incidents
+FOR EACH ROW
+EXECUTE FUNCTION public.update_row_updated_at();
 
 -- Performance indexes
-CREATE INDEX idx_incidents_occurred_at ON incidents(occurred_at DESC);
-CREATE INDEX idx_incidents_behavior_id ON incidents(behavior_id);
-CREATE INDEX idx_incidents_setting ON incidents(setting);
-CREATE INDEX idx_incidents_severity ON incidents(severity);
-CREATE INDEX idx_incidents_function ON incidents(hypothesized_function);
-CREATE INDEX idx_incidents_date ON incidents(DATE(occurred_at));
+CREATE INDEX idx_incidents_occurred_at
+ON incidents(occurred_at DESC);
+
+CREATE INDEX idx_incidents_occurred_date
+ON incidents(occurred_date);
+
+CREATE INDEX idx_incidents_behavior_id
+ON incidents(behavior_id);
+
+CREATE INDEX idx_incidents_setting
+ON incidents(setting);
+
+CREATE INDEX idx_incidents_severity
+ON incidents(severity);
+
+CREATE INDEX idx_incidents_function
+ON incidents(hypothesized_function);
 
 -- ============================================================
 -- JUNCTION TABLE: incident_antecedents
 -- ============================================================
-
 CREATE TABLE incident_antecedents (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
@@ -209,13 +238,15 @@ CREATE TABLE incident_antecedents (
   UNIQUE(incident_id, antecedent_id)
 );
 
-CREATE INDEX idx_incident_antecedents_incident ON incident_antecedents(incident_id);
-CREATE INDEX idx_incident_antecedents_antecedent ON incident_antecedents(antecedent_id);
+CREATE INDEX idx_incident_antecedents_incident
+ON incident_antecedents(incident_id);
+
+CREATE INDEX idx_incident_antecedents_antecedent
+ON incident_antecedents(antecedent_id);
 
 -- ============================================================
 -- JUNCTION TABLE: incident_consequences
 -- ============================================================
-
 CREATE TABLE incident_consequences (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
@@ -223,13 +254,15 @@ CREATE TABLE incident_consequences (
   UNIQUE(incident_id, consequence_id)
 );
 
-CREATE INDEX idx_incident_consequences_incident ON incident_consequences(incident_id);
-CREATE INDEX idx_incident_consequences_consequence ON incident_consequences(consequence_id);
+CREATE INDEX idx_incident_consequences_incident
+ON incident_consequences(incident_id);
+
+CREATE INDEX idx_incident_consequences_consequence
+ON incident_consequences(consequence_id);
 
 -- ============================================================
 -- TABLE: daily_logs
 -- ============================================================
-
 CREATE TABLE daily_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   log_date DATE NOT NULL UNIQUE,
@@ -246,16 +279,16 @@ CREATE TABLE daily_logs (
 );
 
 CREATE TRIGGER update_daily_logs_updated_at
-  BEFORE UPDATE ON daily_logs
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
+BEFORE UPDATE ON daily_logs
+FOR EACH ROW
+EXECUTE FUNCTION public.update_row_updated_at();
 
-CREATE INDEX idx_daily_logs_date ON daily_logs(log_date DESC);
+CREATE INDEX idx_daily_logs_date
+ON daily_logs(log_date DESC);
 
 -- ============================================================
 -- TABLE: ai_notes
 -- ============================================================
-
 CREATE TABLE ai_notes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   incident_id UUID REFERENCES incidents(id) ON DELETE SET NULL,
@@ -267,16 +300,23 @@ CREATE TABLE ai_notes (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_ai_notes_incident ON ai_notes(incident_id);
-CREATE INDEX idx_ai_notes_daily_log ON ai_notes(daily_log_id);
-CREATE INDEX idx_ai_notes_type ON ai_notes(note_type);
-CREATE INDEX idx_ai_notes_created ON ai_notes(created_at DESC);
+CREATE INDEX idx_ai_notes_incident
+ON ai_notes(incident_id);
+
+CREATE INDEX idx_ai_notes_daily_log
+ON ai_notes(daily_log_id);
+
+CREATE INDEX idx_ai_notes_type
+ON ai_notes(note_type);
+
+CREATE INDEX idx_ai_notes_created
+ON ai_notes(created_at DESC);
 
 -- ============================================================
--- VIEWS: Useful pre-built queries
+-- VIEWS
 -- ============================================================
 
--- View: Incidents with behavior names (most common query)
+-- View: Incidents with behavior names
 CREATE VIEW incidents_with_behavior AS
 SELECT
   i.*,
@@ -286,13 +326,12 @@ SELECT
   bd.is_target_behavior,
   bd.is_replacement_behavior
 FROM incidents i
-JOIN behavior_definitions bd ON i.behavior_id = bd.id
-ORDER BY i.occurred_at DESC;
+JOIN behavior_definitions bd ON i.behavior_id = bd.id;
 
 -- View: Daily incident summary
 CREATE VIEW daily_incident_summary AS
 SELECT
-  DATE(occurred_at) AS incident_date,
+  occurred_date AS incident_date,
   COUNT(*) AS total_incidents,
   COUNT(*) FILTER (WHERE severity = 'crisis') AS crisis_count,
   COUNT(*) FILTER (WHERE severity = 'high') AS high_count,
@@ -305,8 +344,7 @@ SELECT
   MODE() WITHIN GROUP (ORDER BY setting) AS most_common_setting,
   MODE() WITHIN GROUP (ORDER BY severity) AS most_common_severity
 FROM incidents
-GROUP BY DATE(occurred_at)
-ORDER BY incident_date DESC;
+GROUP BY occurred_date;
 
 -- View: Behavior frequency ranking
 CREATE VIEW behavior_frequency AS
@@ -318,17 +356,18 @@ SELECT
   COUNT(i.id) AS total_incidents,
   COUNT(i.id) FILTER (WHERE i.occurred_at >= NOW() - INTERVAL '7 days') AS last_7_days,
   COUNT(i.id) FILTER (WHERE i.occurred_at >= NOW() - INTERVAL '30 days') AS last_30_days,
-  ROUND(AVG(CASE
-    WHEN i.severity = 'low' THEN 1
-    WHEN i.severity = 'medium' THEN 2
-    WHEN i.severity = 'high' THEN 3
-    WHEN i.severity = 'crisis' THEN 4
-  END), 2) AS avg_severity_score
+  ROUND(AVG(
+    CASE
+      WHEN i.severity = 'low' THEN 1
+      WHEN i.severity = 'medium' THEN 2
+      WHEN i.severity = 'high' THEN 3
+      WHEN i.severity = 'crisis' THEN 4
+    END
+  ), 2) AS avg_severity_score
 FROM behavior_definitions bd
 LEFT JOIN incidents i ON bd.id = i.behavior_id
 WHERE bd.is_active = TRUE
-GROUP BY bd.id, bd.name, bd.color, bd.is_target_behavior
-ORDER BY total_incidents DESC;
+GROUP BY bd.id, bd.name, bd.color, bd.is_target_behavior;
 
 -- View: Antecedent frequency
 CREATE VIEW antecedent_frequency AS
@@ -342,8 +381,7 @@ FROM antecedent_options ao
 LEFT JOIN incident_antecedents ia ON ao.id = ia.antecedent_id
 LEFT JOIN incidents i ON ia.incident_id = i.id
 WHERE ao.is_active = TRUE
-GROUP BY ao.id, ao.label, ao.category
-ORDER BY times_recorded DESC;
+GROUP BY ao.id, ao.label, ao.category;
 
 -- View: Consequence frequency
 CREATE VIEW consequence_frequency AS
@@ -357,10 +395,9 @@ FROM consequence_options co
 LEFT JOIN incident_consequences ic ON co.id = ic.consequence_id
 LEFT JOIN incidents i ON ic.incident_id = i.id
 WHERE co.is_active = TRUE
-GROUP BY co.id, co.label, co.type
-ORDER BY times_recorded DESC;
+GROUP BY co.id, co.label, co.type;
 
--- View: ABC Pattern chains (for pattern analysis)
+-- View: ABC Pattern chains
 CREATE VIEW abc_patterns AS
 SELECT
   ao.label AS antecedent,
@@ -375,11 +412,10 @@ JOIN antecedent_options ao ON ia.antecedent_id = ao.id
 JOIN incident_consequences ic ON i.id = ic.incident_id
 JOIN consequence_options co ON ic.consequence_id = co.id
 GROUP BY ao.label, bd.name, co.label, i.hypothesized_function
-HAVING COUNT(*) >= 2
-ORDER BY occurrence_count DESC;
+HAVING COUNT(*) >= 2;
 
 -- ============================================================
--- RPC FUNCTIONS: Complex queries as Supabase functions
+-- RPC FUNCTIONS
 -- ============================================================
 
 -- Function: Get incidents for a date range with all related data
@@ -432,18 +468,18 @@ BEGIN
     i.parent_raw_notes,
     i.ai_formatted_notes,
     i.created_at,
-    ARRAY(
+    COALESCE(ARRAY(
       SELECT ao.label
       FROM incident_antecedents ia
       JOIN antecedent_options ao ON ia.antecedent_id = ao.id
       WHERE ia.incident_id = i.id
-    ) AS antecedent_labels,
-    ARRAY(
+    ), ARRAY[]::TEXT[]) AS antecedent_labels,
+    COALESCE(ARRAY(
       SELECT co.label
       FROM incident_consequences ic
       JOIN consequence_options co ON ic.consequence_id = co.id
       WHERE ic.incident_id = i.id
-    ) AS consequence_labels
+    ), ARRAY[]::TEXT[]) AS consequence_labels
   FROM incidents i
   JOIN behavior_definitions bd ON i.behavior_id = bd.id
   WHERE i.occurred_at BETWEEN start_date AND end_date
@@ -451,7 +487,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function: Get hourly distribution of incidents (for heatmap)
+-- Function: Get hourly distribution of incidents
 CREATE OR REPLACE FUNCTION get_hourly_distribution(
   start_date TIMESTAMPTZ DEFAULT NOW() - INTERVAL '30 days',
   end_date TIMESTAMPTZ DEFAULT NOW()
@@ -469,16 +505,14 @@ BEGIN
     COUNT(*) AS incident_count
   FROM incidents
   WHERE occurred_at BETWEEN start_date AND end_date
-  GROUP BY hour_of_day, day_of_week
+  GROUP BY EXTRACT(HOUR FROM occurred_at), EXTRACT(DOW FROM occurred_at)
   ORDER BY day_of_week, hour_of_day;
 END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS)
--- Since there's no auth, we use permissive policies
--- that allow all operations with the anon key.
--- For a single-family app this is acceptable.
+-- Since there's no auth, use permissive policies for now.
 -- ============================================================
 
 ALTER TABLE child_profile ENABLE ROW LEVEL SECURITY;
@@ -491,16 +525,59 @@ ALTER TABLE incident_consequences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_notes ENABLE ROW LEVEL SECURITY;
 
--- Permissive policies for anon access (no auth required)
-CREATE POLICY "Allow all access to child_profile" ON child_profile FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to behavior_definitions" ON behavior_definitions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to antecedent_options" ON antecedent_options FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to consequence_options" ON consequence_options FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to incidents" ON incidents FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to incident_antecedents" ON incident_antecedents FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to incident_consequences" ON incident_consequences FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to daily_logs" ON daily_logs FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all access to ai_notes" ON ai_notes FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all on child_profile"
+ON child_profile
+FOR ALL
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "Allow all on behavior_definitions"
+ON behavior_definitions
+FOR ALL
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "Allow all on antecedent_options"
+ON antecedent_options
+FOR ALL
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "Allow all on consequence_options"
+ON consequence_options
+FOR ALL
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "Allow all on incidents"
+ON incidents
+FOR ALL
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "Allow all on incident_antecedents"
+ON incident_antecedents
+FOR ALL
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "Allow all on incident_consequences"
+ON incident_consequences
+FOR ALL
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "Allow all on daily_logs"
+ON daily_logs
+FOR ALL
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "Allow all on ai_notes"
+ON ai_notes
+FOR ALL
+USING (true)
+WITH CHECK (true);
 ```
 
 ### Step 2: Seed Default Data
