@@ -30,3 +30,25 @@ Binary artifacts are intentionally excluded from this repository. If you are mig
 - shadcn/ui initialization and requested component primitives.
 - Supabase browser/server helpers under `src/lib/supabase`.
 - Step 1 route and folder placeholders for app pages and API routes.
+
+
+## Security mode (read-only by default)
+
+This app now runs in **read-only mode** for all visitors. Data mutations require an admin password login and are executed through server routes.
+
+### Required Supabase keys
+
+Use these exact keys:
+
+- `NEXT_PUBLIC_SUPABASE_URL` → Supabase Project URL (safe to expose).
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` → **anon / public / publishable** key (safe for browser read access).
+- `SUPABASE_SERVICE_ROLE_KEY` → **service_role / secret** key (server only, never expose to browser).
+
+### Required admin env vars
+
+- `ADMIN_ACCESS_PASSWORD` → strong password used for admin login.
+- `ADMIN_SESSION_SECRET` → long random secret used to sign admin session cookies.
+
+### Apply database policies
+
+Run `supabase-security.sql` in the Supabase SQL editor to allow read-only access and block direct writes from anon/authenticated clients.

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { adminMutate } from '@/lib/admin-client'
 import { createClient } from '@/lib/supabase/client'
 import type {
   BehaviorFunction,
@@ -156,51 +157,16 @@ export function useCreateIncident() {
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const { antecedent_ids, consequence_ids, ...incidentPayload } = input
-    const { data, error: createError } = await supabase
-      .from('incidents')
-      .insert(incidentPayload)
-      .select('*')
-      .single()
-
-    if (createError || !data) {
-      setError(createError?.message ?? 'Unable to create incident')
+    try {
+      const data = await adminMutate<Incident>('create_incident', input as Record<string, unknown>)
       setLoading(false)
-      return { data: null, error: createError }
+      return { data, error: null }
+    } catch (createError) {
+      const message = createError instanceof Error ? createError.message : 'Unable to create incident'
+      setError(message)
+      setLoading(false)
+      return { data: null, error: new Error(message) }
     }
-
-    const incidentId = (data as Incident).id
-    if (antecedent_ids.length) {
-      const { error: antecedentError } = await supabase.from('incident_antecedents').insert(
-        antecedent_ids.map((antecedentId) => ({
-          incident_id: incidentId,
-          antecedent_id: antecedentId,
-        })),
-      )
-      if (antecedentError) {
-        setError(antecedentError.message)
-        setLoading(false)
-        return { data: null, error: antecedentError }
-      }
-    }
-
-    if (consequence_ids.length) {
-      const { error: consequenceError } = await supabase.from('incident_consequences').insert(
-        consequence_ids.map((consequenceId) => ({
-          incident_id: incidentId,
-          consequence_id: consequenceId,
-        })),
-      )
-      if (consequenceError) {
-        setError(consequenceError.message)
-        setLoading(false)
-        return { data: null, error: consequenceError }
-      }
-    }
-
-    setLoading(false)
-    return { data: data as Incident, error: null }
   }, [])
 
   return { createIncident, loading, error }
@@ -214,48 +180,16 @@ export function useUpdateIncident() {
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const { antecedent_ids, consequence_ids, ...incidentPayload } = input
-
-    if (Object.keys(incidentPayload).length > 0) {
-      const { error: updateError } = await supabase.from('incidents').update(incidentPayload).eq('id', id)
-      if (updateError) {
-        setError(updateError.message)
-        setLoading(false)
-        return { error: updateError }
-      }
+    try {
+      await adminMutate<{ id: string }>('update_incident', { id, updates: input as Record<string, unknown> })
+      setLoading(false)
+      return { error: null }
+    } catch (updateError) {
+      const message = updateError instanceof Error ? updateError.message : 'Unable to update incident'
+      setError(message)
+      setLoading(false)
+      return { error: new Error(message) }
     }
-
-    if (antecedent_ids) {
-      await supabase.from('incident_antecedents').delete().eq('incident_id', id)
-      if (antecedent_ids.length) {
-        const { error: antecedentError } = await supabase.from('incident_antecedents').insert(
-          antecedent_ids.map((antecedentId) => ({ incident_id: id, antecedent_id: antecedentId })),
-        )
-        if (antecedentError) {
-          setError(antecedentError.message)
-          setLoading(false)
-          return { error: antecedentError }
-        }
-      }
-    }
-
-    if (consequence_ids) {
-      await supabase.from('incident_consequences').delete().eq('incident_id', id)
-      if (consequence_ids.length) {
-        const { error: consequenceError } = await supabase.from('incident_consequences').insert(
-          consequence_ids.map((consequenceId) => ({ incident_id: id, consequence_id: consequenceId })),
-        )
-        if (consequenceError) {
-          setError(consequenceError.message)
-          setLoading(false)
-          return { error: consequenceError }
-        }
-      }
-    }
-
-    setLoading(false)
-    return { error: null }
   }, [])
 
   return { updateIncident, loading, error }
@@ -269,17 +203,16 @@ export function useDeleteIncident() {
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const { error: deleteError } = await supabase.from('incidents').delete().eq('id', id)
-
-    if (deleteError) {
-      setError(deleteError.message)
+    try {
+      await adminMutate<{ id: string }>('delete_incident', { id })
       setLoading(false)
-      return { error: deleteError }
+      return { error: null }
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : 'Unable to delete incident'
+      setError(message)
+      setLoading(false)
+      return { error: new Error(message) }
     }
-
-    setLoading(false)
-    return { error: null }
   }, [])
 
   return { deleteIncident, loading, error }
