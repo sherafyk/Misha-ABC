@@ -61,7 +61,12 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json(responseSchema.parse(JSON.parse(completion.output_text)))
+    const output = completion.output_text?.trim()
+    if (!output) {
+      throw new Error('AI returned an empty response while suggesting function.')
+    }
+
+    return NextResponse.json(responseSchema.parse(JSON.parse(output)))
   } catch (error) {
     return NextResponse.json(
       {

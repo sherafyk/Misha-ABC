@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
+import { parseJsonResponse } from '@/lib/http'
+
 export function useAdminSession() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [configured, setConfigured] = useState(true)
@@ -10,9 +12,9 @@ export function useAdminSession() {
   const refresh = useCallback(async () => {
     setLoading(true)
     const response = await fetch('/api/admin/session', { cache: 'no-store', credentials: 'include' })
-    const body = (await response.json()) as { isAdmin: boolean; configured: boolean }
-    setIsAdmin(body.isAdmin)
-    setConfigured(body.configured)
+    const body = await parseJsonResponse<{ isAdmin?: boolean; configured?: boolean }>(response)
+    setIsAdmin(body?.isAdmin ?? false)
+    setConfigured(body?.configured ?? true)
     setLoading(false)
   }, [])
 
@@ -33,9 +35,9 @@ export function useAdminSession() {
         body: JSON.stringify({ password }),
       })
 
-      const body = (await response.json()) as { error?: string }
+      const body = await parseJsonResponse<{ error?: string }>(response)
       if (!response.ok) {
-        throw new Error(body.error ?? 'Unable to login')
+        throw new Error(body?.error ?? 'Unable to login')
       }
 
       await refresh()

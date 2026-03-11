@@ -66,7 +66,11 @@ export async function POST(request: Request) {
       },
     })
 
-    const output = completion.output_text
+    const output = completion.output_text?.trim()
+    if (!output) {
+      throw new Error('AI returned an empty response while formatting the note.')
+    }
+
     const result = responseSchema.parse(JSON.parse(output))
 
     return NextResponse.json(result)
