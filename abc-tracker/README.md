@@ -32,6 +32,16 @@ Binary artifacts are intentionally excluded from this repository. If you are mig
 - Step 1 route and folder placeholders for app pages and API routes.
 
 
+
+## Fresh Supabase reset (new migration workflow)
+
+A full from-scratch Supabase workflow now lives in `supabase/`:
+
+- Ordered migrations: `supabase/migrations/*.sql`
+- Seeds: `supabase/seeds/*.sql`
+- Dashboard-friendly seed: `supabase/seed-editor.sql`
+- Full setup guide (including admin/caretaker roles + screen-name login model): `supabase/README.md`
+
 ## Security mode (read-only by default)
 
 This app now runs in **read-only mode** for all visitors. Data mutations require an admin password login and are executed through server routes.
