@@ -1,5 +1,7 @@
 begin;
 
+create extension if not exists pgcrypto with schema extensions;
+
 create or replace function public.update_row_updated_at()
 returns trigger
 language plpgsql
@@ -10,18 +12,22 @@ begin
 end;
 $$;
 
+drop trigger if exists update_child_profile_updated_at on public.child_profile;
 create trigger update_child_profile_updated_at
 before update on public.child_profile
 for each row execute function public.update_row_updated_at();
 
+drop trigger if exists update_incidents_updated_at on public.incidents;
 create trigger update_incidents_updated_at
 before update on public.incidents
 for each row execute function public.update_row_updated_at();
 
+drop trigger if exists update_daily_logs_updated_at on public.daily_logs;
 create trigger update_daily_logs_updated_at
 before update on public.daily_logs
 for each row execute function public.update_row_updated_at();
 
+drop trigger if exists update_app_users_updated_at on public.app_users;
 create trigger update_app_users_updated_at
 before update on public.app_users
 for each row execute function public.update_row_updated_at();
@@ -30,19 +36,20 @@ create or replace function public.hash_pin(pin_text text)
 returns text
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
-  select crypt(pin_text, gen_salt('bf', 10));
+  select extensions.crypt(pin_text, extensions.gen_salt('bf', 10));
 $$;
 
 create or replace function public.verify_pin(pin_text text, hashed text)
 returns boolean
 language sql
 stable
+set search_path = public, extensions
 as $$
   select case
     when hashed is null then false
-    else crypt(pin_text, hashed) = hashed
+    else extensions.crypt(pin_text, hashed) = hashed
   end;
 $$;
 
@@ -55,7 +62,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   found_user public.app_users%rowtype;
@@ -78,10 +85,14 @@ begin
     end if;
   end if;
 
-  raw_token := encode(gen_random_bytes(32), 'hex');
+  raw_token := encode(extensions.gen_random_bytes(32), 'hex');
 
   insert into public.app_user_sessions (app_user_id, token_hash, expires_at)
-  values (found_user.id, encode(digest(raw_token, 'sha256'), 'hex'), now() + token_ttl);
+  values (
+    found_user.id,
+    encode(extensions.digest(raw_token, 'sha256'), 'hex'),
+    now() + token_ttl
+  );
 
   update public.app_users
   set last_login_at = now()
@@ -101,12 +112,12 @@ returns table (
 )
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select u.id, u.screen_name::text, u.role, s.expires_at
   from public.app_user_sessions s
   join public.app_users u on u.id = s.app_user_id
-  where s.token_hash = encode(digest(session_token, 'sha256'), 'hex')
+  where s.token_hash = encode(extensions.digest(session_token, 'sha256'), 'hex')
     and s.revoked_at is null
     and s.expires_at > now()
     and u.is_active = true;
@@ -116,11 +127,11 @@ create or replace function public.revoke_screen_session(session_token text)
 returns void
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   update public.app_user_sessions
   set revoked_at = now()
-  where token_hash = encode(digest(session_token, 'sha256'), 'hex')
+  where token_hash = encode(extensions.digest(session_token, 'sha256'), 'hex')
     and revoked_at is null;
 $$;
 
