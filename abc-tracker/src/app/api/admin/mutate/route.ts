@@ -79,7 +79,9 @@ export async function POST(request: Request) {
       const rawPayload = (payload ?? {}) as Record<string, unknown>
       const antecedent_ids = Array.isArray(rawPayload.antecedent_ids) ? (rawPayload.antecedent_ids as string[]) : []
       const consequence_ids = Array.isArray(rawPayload.consequence_ids) ? (rawPayload.consequence_ids as string[]) : []
-      const { antecedent_ids: _a, consequence_ids: _c, ...incidentPayload } = rawPayload
+      const incidentPayload = { ...rawPayload }
+      delete incidentPayload.antecedent_ids
+      delete incidentPayload.consequence_ids
       const { data, error } = await supabase.from('incidents').insert(incidentPayload).select('*').single()
       if (error || !data) return NextResponse.json({ error: error?.message ?? 'Unable to create incident' }, { status: 400 })
 
@@ -103,7 +105,9 @@ export async function POST(request: Request) {
       const { id, updates } = payload as { id: string; updates: Record<string, unknown> }
       const antecedent_ids = Array.isArray(updates.antecedent_ids) ? (updates.antecedent_ids as string[]) : undefined
       const consequence_ids = Array.isArray(updates.consequence_ids) ? (updates.consequence_ids as string[]) : undefined
-      const { antecedent_ids: _a, consequence_ids: _c, ...incidentPayload } = updates
+      const incidentPayload = { ...updates }
+      delete incidentPayload.antecedent_ids
+      delete incidentPayload.consequence_ids
 
       if (Object.keys(incidentPayload).length > 0) {
         const { error } = await supabase.from('incidents').update(incidentPayload).eq('id', id)

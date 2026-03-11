@@ -51,4 +51,23 @@ Use these exact keys:
 
 ### Apply database policies
 
-Run `supabase-security.sql` in the Supabase SQL editor to allow read-only access and block direct writes from anon/authenticated clients.
+Run `supabase-security.sql` for the minimal read-only policy set, or run `supabase-production-setup.sql` for a full production hardening setup (indexes, explicit grants, and optional admin-claim helper for Supabase Auth).
+
+
+### Recommended SQL run order
+
+1. Run your base schema SQL first (`db-supabase-setup.md`).
+2. Run `supabase-production-setup.sql` in Supabase SQL Editor.
+3. Keep `SUPABASE_SERVICE_ROLE_KEY` only in server environments (Vercel project env vars), never in browser code.
+
+### Optional Supabase Auth admin users
+
+If you decide to use Supabase Auth for admin instead of only `ADMIN_ACCESS_PASSWORD`, set an authenticated user's `app_metadata.role` to `admin` from the Supabase SQL editor:
+
+```sql
+update auth.users
+set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || jsonb_build_object('role', 'admin')
+where email = 'admin@example.com';
+```
+
+Then you can enable admin write policies by editing the `false and public.is_admin()` guards in `supabase-production-setup.sql`.
