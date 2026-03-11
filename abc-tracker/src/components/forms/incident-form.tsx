@@ -24,6 +24,7 @@ import { useCreateAntecedent, useAntecedents } from '@/lib/hooks/use-antecedents
 import { useBehaviors } from '@/lib/hooks/use-behaviors'
 import { useCreateConsequence, useConsequences } from '@/lib/hooks/use-consequences'
 import { useCreateIncident } from '@/lib/hooks/use-incidents'
+import { createClient } from '@/lib/supabase/client'
 import { incidentFormSchema, type IncidentFormValues } from '@/lib/types/schemas'
 import type { ConsequenceType } from '@/lib/types/database'
 
@@ -56,6 +57,7 @@ export function IncidentForm() {
   const [peopleInput, setPeopleInput] = useState('')
   const [environmentInput, setEnvironmentInput] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [lastAIRequestAt, setLastAIRequestAt] = useState(0)
 
   const form = useForm<IncidentFormValues>({
     resolver: zodResolver(incidentFormSchema),
@@ -169,7 +171,10 @@ export function IncidentForm() {
   }
 
   const handleAIGenerate = async () => {
+    if (Date.now() - lastAIRequestAt < 1200) return
+
     setAiLoading(true)
+    setLastAIRequestAt(Date.now())
     const values = form.getValues()
     try {
       const response = await fetch('/api/ai/format-note', {
@@ -187,10 +192,23 @@ export function IncidentForm() {
 
       if (!response.ok) throw new Error('AI service unavailable right now')
 
-      const result = (await response.json()) as { formatted_note?: string; message?: string }
-      const note = result.formatted_note ?? result.message
+      const result = (await response.json()) as { formatted_note?: string; suggested_function?: IncidentFormValues['hypothesized_function']; error?: string }
+      const note = result.formatted_note
       if (!note) throw new Error('AI did not return a note')
+
       form.setValue('ai_formatted_notes', note, { shouldDirty: true })
+      if (result.suggested_function) {
+        form.setValue('hypothesized_function', result.suggested_function)
+      }
+
+      const supabase = createClient()
+      await supabase.from('ai_notes').insert({
+        incident_id: null,
+        daily_log_id: null,
+        note_type: 'incident',
+        raw_input: values.parent_raw_notes || JSON.stringify(values),
+        formatted_output: note,
+      })
       toast.success('AI note generated.')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to generate AI note')

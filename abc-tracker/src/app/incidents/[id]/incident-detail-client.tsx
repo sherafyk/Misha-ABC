@@ -2,8 +2,10 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { format } from 'date-fns'
 import { Copy, Pencil, Share2, Sparkles, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { ABCFlowDisplay } from '@/components/cards/abc-flow-display'
 import { Badge } from '@/components/ui/badge'
@@ -20,7 +22,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { useDeleteIncident, useIncident } from '@/lib/hooks/use-incidents'
+import { createClient } from '@/lib/supabase/client'
+import { useDeleteIncident, useIncident, useUpdateIncident } from '@/lib/hooks/use-incidents'
 
 interface IncidentDetailClientProps {
   id: string
@@ -28,8 +31,11 @@ interface IncidentDetailClientProps {
 
 export function IncidentDetailClient({ id }: IncidentDetailClientProps) {
   const router = useRouter()
-  const { incident, loading, error } = useIncident(id)
+  const { incident, loading, error, refetch } = useIncident(id)
   const { deleteIncident, loading: deleting } = useDeleteIncident()
+  const { updateIncident } = useUpdateIncident()
+  const [aiLoading, setAiLoading] = useState(false)
+  const [lastAIRequestAt, setLastAIRequestAt] = useState(0)
 
   const onDelete = async () => {
     const result = await deleteIncident(id)
@@ -43,6 +49,63 @@ export function IncidentDetailClient({ id }: IncidentDetailClientProps) {
     if (!incident) return
     const content = incident.ai_formatted_notes ?? incident.parent_raw_notes ?? ''
     await navigator.clipboard.writeText(content)
+  }
+
+  const generateAINote = async () => {
+    if (!incident || aiLoading || Date.now() - lastAIRequestAt < 1200) return
+
+    setAiLoading(true)
+    setLastAIRequestAt(Date.now())
+
+    try {
+      const response = await fetch('/api/ai/format-note', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          antecedents: incident.antecedents?.map((item) => item.label) ?? [],
+          behavior: incident.behavior?.name,
+          consequences: incident.consequences?.map((item) => item.label) ?? [],
+          severity: incident.severity,
+          setting: incident.setting,
+          parent_raw_notes: incident.parent_raw_notes ?? '',
+          occurred_at: incident.occurred_at,
+          duration_seconds: incident.duration_seconds,
+          people_present: incident.people_present ?? undefined,
+          environmental_factors: incident.environmental_factors ?? undefined,
+        }),
+      })
+
+      const result = (await response.json()) as {
+        formatted_note?: string
+        suggested_function?: 'sensory' | 'escape' | 'attention' | 'tangible' | 'unknown'
+        error?: string
+      }
+
+      if (!response.ok || !result.formatted_note) {
+        throw new Error(result.error ?? 'Unable to generate AI note')
+      }
+
+      await updateIncident(id, {
+        ai_formatted_notes: result.formatted_note,
+        hypothesized_function: result.suggested_function ?? incident.hypothesized_function,
+      })
+
+      const supabase = createClient()
+      await supabase.from('ai_notes').insert({
+        incident_id: incident.id,
+        daily_log_id: null,
+        raw_input: incident.parent_raw_notes ?? JSON.stringify(incident),
+        formatted_output: result.formatted_note,
+        note_type: 'incident',
+      })
+
+      await refetch()
+      toast.success('AI note generated')
+    } catch (generationError) {
+      toast.error(generationError instanceof Error ? generationError.message : 'Unable to generate AI note')
+    } finally {
+      setAiLoading(false)
+    }
   }
 
   if (loading) {
@@ -89,8 +152,8 @@ export function IncidentDetailClient({ id }: IncidentDetailClientProps) {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">AI-Formatted Notes</CardTitle>
           {!incident.ai_formatted_notes && (
-            <Button variant="outline" size="sm">
-              <Sparkles className="mr-1 h-4 w-4" /> Generate AI Note
+            <Button variant="outline" size="sm" onClick={() => void generateAINote()} disabled={aiLoading}>
+              <Sparkles className="mr-1 h-4 w-4" /> {aiLoading ? 'AI is writing...' : 'Generate AI Note'}
             </Button>
           )}
         </CardHeader>
