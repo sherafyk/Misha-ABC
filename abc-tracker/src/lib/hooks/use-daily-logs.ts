@@ -34,6 +34,38 @@ export function useDailyLogs(dateRange?: { startDate?: string; endDate?: string 
     setLoading(false)
   }, [dateRange])
 
+  const upsertDailyLog = useCallback(async (input: DailyLogInput) => {
+    setLoading(true)
+    setError(null)
+
+    const supabase = createClient()
+    const { data, error: upsertError } = await supabase
+      .from('daily_logs')
+      .upsert(input, { onConflict: 'log_date' })
+      .select('*')
+      .single()
+
+    if (upsertError) {
+      setError(upsertError.message)
+      setLoading(false)
+      return { data: null, error: upsertError }
+    }
+
+    setDailyLogs((current) => {
+      const next = [...current]
+      const index = next.findIndex((item) => item.log_date === input.log_date)
+      if (index === -1) {
+        next.unshift(data as DailyLog)
+      } else {
+        next[index] = data as DailyLog
+      }
+      return next.sort((a, b) => (a.log_date < b.log_date ? 1 : -1))
+    })
+
+    setLoading(false)
+    return { data: data as DailyLog, error: null }
+  }, [])
+
   useEffect(() => {
     const timer = setTimeout(() => {
       void fetchDailyLogs()
@@ -48,6 +80,7 @@ export function useDailyLogs(dateRange?: { startDate?: string; endDate?: string 
     error,
     empty: !loading && !error && dailyLogs.length === 0,
     refetch: fetchDailyLogs,
+    upsertDailyLog,
     setDailyLogs,
   }
 }
