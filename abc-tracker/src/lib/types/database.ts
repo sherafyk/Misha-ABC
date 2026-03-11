@@ -13,13 +13,18 @@ export type ConsequenceType =
 export interface ChildProfile {
   id: string
   first_name: string
-  last_name: string
-  date_of_birth: string
+  last_name: string | null
+  date_of_birth: string | null
   diagnosis_notes: string | null
   therapist_name: string | null
   therapist_email: string | null
   bcba_name: string | null
   bcba_email: string | null
+  preferences?: {
+    languagePreference?: 'person_first' | 'identity_first'
+    detailLevel?: 'concise' | 'detailed'
+    includeRecommendations?: boolean
+  } | null
   created_at: string
   updated_at: string
 }
