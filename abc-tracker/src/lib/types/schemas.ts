@@ -27,7 +27,7 @@ export const incidentFormSchema = z.object({
   ai_formatted_notes: z.string().max(4000).optional().or(z.literal('')),
 })
 
-export type IncidentFormValues = z.infer<typeof incidentFormSchema>
+export type IncidentFormValues = z.input<typeof incidentFormSchema>
 
 export const quickLogSchema = z.object({
   occurred_at: z.string().min(1, 'Date and time are required'),
@@ -37,7 +37,7 @@ export const quickLogSchema = z.object({
   parent_raw_notes: z.string().max(1000).optional().or(z.literal('')),
 })
 
-export type QuickLogValues = z.infer<typeof quickLogSchema>
+export type QuickLogValues = z.input<typeof quickLogSchema>
 
 export const dailyLogSchema = z
   .object({
@@ -66,4 +66,4 @@ export const dailyLogSchema = z
     }
   })
 
-export type DailyLogFormValues = z.infer<typeof dailyLogSchema>
+export type DailyLogFormValues = z.input<typeof dailyLogSchema>
