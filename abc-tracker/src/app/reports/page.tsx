@@ -3,16 +3,20 @@
 import { useMemo, useState } from 'react'
 import { format, parseISO, subDays } from 'date-fns'
 
-import { AntecedentBar } from '@/components/charts/antecedent-bar'
-import { ABCPatternFlow } from '@/components/charts/abc-pattern-flow'
-import { CalendarHeatmap } from '@/components/charts/calendar-heatmap'
-import { ConsequenceBar } from '@/components/charts/consequence-bar'
-import { CorrelationScatter } from '@/components/charts/correlation-scatter'
-import { FunctionDonut } from '@/components/charts/function-donut'
-import { IncidentsOverTime } from '@/components/charts/incidents-over-time'
-import { SettingBreakdown } from '@/components/charts/setting-breakdown'
-import { SeverityStackedBar } from '@/components/charts/severity-stacked-bar'
-import { TimeOfDayHeatmap } from '@/components/charts/time-of-day-heatmap'
+import dynamic from 'next/dynamic'
+
+const chartLoading = () => <div className="h-72 animate-pulse rounded-xl bg-slate-100" />
+
+const AntecedentBar = dynamic(() => import('@/components/charts/antecedent-bar').then((m) => m.AntecedentBar), { loading: chartLoading })
+const ABCPatternFlow = dynamic(() => import('@/components/charts/abc-pattern-flow').then((m) => m.ABCPatternFlow), { loading: chartLoading })
+const CalendarHeatmap = dynamic(() => import('@/components/charts/calendar-heatmap').then((m) => m.CalendarHeatmap), { loading: chartLoading })
+const ConsequenceBar = dynamic(() => import('@/components/charts/consequence-bar').then((m) => m.ConsequenceBar), { loading: chartLoading })
+const CorrelationScatter = dynamic(() => import('@/components/charts/correlation-scatter').then((m) => m.CorrelationScatter), { loading: chartLoading })
+const FunctionDonut = dynamic(() => import('@/components/charts/function-donut').then((m) => m.FunctionDonut), { loading: chartLoading })
+const IncidentsOverTime = dynamic(() => import('@/components/charts/incidents-over-time').then((m) => m.IncidentsOverTime), { loading: chartLoading })
+const SettingBreakdown = dynamic(() => import('@/components/charts/setting-breakdown').then((m) => m.SettingBreakdown), { loading: chartLoading })
+const SeverityStackedBar = dynamic(() => import('@/components/charts/severity-stacked-bar').then((m) => m.SeverityStackedBar), { loading: chartLoading })
+const TimeOfDayHeatmap = dynamic(() => import('@/components/charts/time-of-day-heatmap').then((m) => m.TimeOfDayHeatmap), { loading: chartLoading })
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
