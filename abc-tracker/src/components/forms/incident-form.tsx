@@ -26,7 +26,7 @@ import { useCreateConsequence, useConsequences } from '@/lib/hooks/use-consequen
 import { useCreateIncident } from '@/lib/hooks/use-incidents'
 import { createClient } from '@/lib/supabase/client'
 import { incidentFormSchema, type IncidentFormValues } from '@/lib/types/schemas'
-import type { ConsequenceType } from '@/lib/types/database'
+import type { BehaviorFunction, ConsequenceType, IncidentSetting } from '@/lib/types/database'
 
 const STEPS = ['When & Where', 'Antecedent', 'Behavior', 'Consequence', 'Context & Notes', 'Review']
 const DRAFT_KEY = 'abc-incident-draft-v1'
@@ -111,12 +111,14 @@ export function IncidentForm() {
 
   const saveIncident = async (resetAfterSave = false) => {
     const values = form.getValues()
-    const durationSeconds = (values.duration_minutes ?? 0) * 60 + (values.duration_seconds_only ?? 0)
+    const durationMinutes = Number(values.duration_minutes ?? 0)
+    const durationSecondsOnly = Number(values.duration_seconds_only ?? 0)
+    const durationSeconds = durationMinutes * 60 + durationSecondsOnly
 
     const payload = {
       occurred_at: new Date(values.occurred_at).toISOString(),
       duration_seconds: durationSeconds > 0 ? durationSeconds : null,
-      setting: values.setting,
+      setting: values.setting as IncidentSetting,
       setting_detail: values.setting_detail || null,
       antecedent_ids: values.antecedent_ids,
       antecedent_notes: values.antecedent_notes || null,
@@ -125,11 +127,11 @@ export function IncidentForm() {
       severity: values.severity,
       consequence_ids: values.consequence_ids,
       consequence_notes: values.consequence_notes || null,
-      hypothesized_function: values.hypothesized_function,
+      hypothesized_function: values.hypothesized_function as BehaviorFunction,
       parent_raw_notes: values.parent_raw_notes || null,
       ai_formatted_notes: values.ai_formatted_notes || null,
-      people_present: values.people_present.length ? values.people_present.join(', ') : null,
-      environmental_factors: values.environmental_factors.length ? values.environmental_factors.join(', ') : null,
+      people_present: values.people_present?.length ? values.people_present.join(', ') : null,
+      environmental_factors: values.environmental_factors?.length ? values.environmental_factors.join(', ') : null,
       mood_before: values.mood_before || null,
     }
 
@@ -152,7 +154,7 @@ export function IncidentForm() {
   const handleAddTag = (field: 'people_present' | 'environmental_factors', value: string) => {
     const cleaned = value.trim()
     if (!cleaned) return
-    const existing = form.getValues(field)
+    const existing = form.getValues(field) ?? []
     if (existing.includes(cleaned)) return
     form.setValue(field, [...existing, cleaned], { shouldValidate: true, shouldDirty: true })
   }
@@ -185,7 +187,7 @@ export function IncidentForm() {
           behavior: selectedBehavior?.name,
           consequences: consequences.filter((item) => values.consequence_ids.includes(item.id)).map((item) => item.label),
           severity: values.severity,
-          setting: values.setting,
+          setting: values.setting as IncidentSetting,
           parent_raw_notes: values.parent_raw_notes,
         }),
       })
@@ -416,8 +418,8 @@ export function IncidentForm() {
                 </Button>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                {form.watch('people_present').map((person) => (
-                  <Badge key={person} className="cursor-pointer" onClick={() => form.setValue('people_present', form.watch('people_present').filter((value) => value !== person))}>
+                {(form.watch('people_present') ?? []).map((person) => (
+                  <Badge key={person} className="cursor-pointer" onClick={() => form.setValue('people_present', (form.watch('people_present') ?? []).filter((value) => value !== person))}>
                     {person} ×
                   </Badge>
                 ))}
@@ -451,8 +453,8 @@ export function IncidentForm() {
                 </Button>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                {form.watch('environmental_factors').map((item) => (
-                  <Badge key={item} className="cursor-pointer" onClick={() => form.setValue('environmental_factors', form.watch('environmental_factors').filter((value) => value !== item))}>
+                {(form.watch('environmental_factors') ?? []).map((item) => (
+                  <Badge key={item} className="cursor-pointer" onClick={() => form.setValue('environmental_factors', (form.watch('environmental_factors') ?? []).filter((value) => value !== item))}>
                     {item} ×
                   </Badge>
                 ))}

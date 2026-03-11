@@ -1,7 +1,8 @@
 'use client'
 
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { useEffect } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -14,6 +15,7 @@ import { SEVERITY_LEVELS, SETTINGS } from '@/lib/constants/abc-options'
 import { useBehaviors } from '@/lib/hooks/use-behaviors'
 import { useCreateIncident } from '@/lib/hooks/use-incidents'
 import { quickLogSchema, type QuickLogValues } from '@/lib/types/schemas'
+import type { BehaviorFunction, IncidentSetting } from '@/lib/types/database'
 
 export function QuickLog() {
   const { behaviors } = useBehaviors()
@@ -22,7 +24,7 @@ export function QuickLog() {
   const form = useForm<QuickLogValues>({
     resolver: zodResolver(quickLogSchema),
     defaultValues: {
-      occurred_at: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
+      occurred_at: '',
       behavior_id: '',
       severity: 'medium',
       setting: 'home',
@@ -30,11 +32,22 @@ export function QuickLog() {
     },
   })
 
+
+  useEffect(() => {
+    const now = new Date()
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+    form.setValue('occurred_at', now.toISOString().slice(0, 16))
+  }, [form])
+
+  const behaviorId = useWatch({ control: form.control, name: 'behavior_id' })
+  const severity = useWatch({ control: form.control, name: 'severity' })
+  const setting = useWatch({ control: form.control, name: 'setting' })
+
   const onSubmit = async (values: QuickLogValues) => {
     const payload = {
       occurred_at: new Date(values.occurred_at).toISOString(),
       duration_seconds: null,
-      setting: values.setting,
+      setting: values.setting as IncidentSetting,
       setting_detail: null,
       antecedent_ids: [],
       antecedent_notes: null,
@@ -43,7 +56,7 @@ export function QuickLog() {
       severity: values.severity,
       consequence_ids: [],
       consequence_notes: null,
-      hypothesized_function: 'unknown' as const,
+      hypothesized_function: 'unknown' as BehaviorFunction,
       parent_raw_notes: values.parent_raw_notes || null,
       ai_formatted_notes: null,
       people_present: null,
@@ -74,7 +87,7 @@ export function QuickLog() {
           </div>
           <div>
             <Label>Behavior</Label>
-            <Select value={form.watch('behavior_id')} onValueChange={(value) => form.setValue('behavior_id', value)}>
+            <Select value={behaviorId ?? ''} onValueChange={(value) => { if (value) form.setValue('behavior_id', value) }}>
               <SelectTrigger className="h-11">
                 <SelectValue placeholder="Select behavior" />
               </SelectTrigger>
@@ -88,7 +101,7 @@ export function QuickLog() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Severity</Label>
-              <Select value={form.watch('severity')} onValueChange={(value) => form.setValue('severity', value as QuickLogValues['severity'])}>
+              <Select value={severity ?? 'medium'} onValueChange={(value) => { if (value) form.setValue('severity', value as QuickLogValues['severity']) }}>
                 <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
@@ -101,7 +114,7 @@ export function QuickLog() {
             </div>
             <div>
               <Label>Setting</Label>
-              <Select value={form.watch('setting')} onValueChange={(value) => form.setValue('setting', value as QuickLogValues['setting'])}>
+              <Select value={setting ?? 'home'} onValueChange={(value) => { if (value) form.setValue('setting', value as QuickLogValues['setting']) }}>
                 <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>

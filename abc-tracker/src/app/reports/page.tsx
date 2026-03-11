@@ -241,6 +241,8 @@ export default function ReportsPage() {
     }
   })
 
+
+  const trendDirection = (incidentsOverTime[incidentsOverTime.length - 1]?.incidents ?? 0) >= (incidentsOverTime[0]?.incidents ?? 0) ? '↑' : '↓'
   const medicationData = dailyLogs.map((log) => {
     const count = incidents.filter((incident) => format(new Date(incident.occurred_at), 'yyyy-MM-dd') === log.log_date).length
     return {
@@ -255,7 +257,7 @@ export default function ReportsPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Reports & Data Visualization</CardTitle>
-          <Select value={range} onValueChange={(value: '7' | '30' | '90') => setRange(value)}>
+          <Select value={range} onValueChange={(value) => { if (value) setRange(value) }}>
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="7">Last 7 days</SelectItem>
@@ -285,7 +287,7 @@ export default function ReportsPage() {
             <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Most common behavior</p><p className="text-sm font-semibold">{metrics.behavior}</p></CardContent></Card>
             <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Most common function</p><p className="text-sm font-semibold">{metrics.fn}</p></CardContent></Card>
             <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Most common antecedent</p><p className="text-sm font-semibold">{metrics.antecedent}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Trend</p><p className="text-2xl font-semibold">{incidentsOverTime.at(-1)?.incidents ?? 0 >= incidentsOverTime.at(0)?.incidents ?? 0 ? '↑' : '↓'}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Trend</p><p className="text-2xl font-semibold">{trendDirection}</p></CardContent></Card>
           </div>
 
           <Card><CardHeader><CardTitle>Incidents Over Time</CardTitle></CardHeader><CardContent><IncidentsOverTime data={incidentsOverTime} /></CardContent></Card>
@@ -302,7 +304,7 @@ export default function ReportsPage() {
         <TabsContent value="behavior" className="space-y-4">
           <Card>
             <CardContent className="p-4">
-              <Select value={selectedBehaviorId} onValueChange={setSelectedBehaviorId}>
+              <Select value={selectedBehaviorId} onValueChange={(value) => { if (value) setSelectedBehaviorId(value) }}>
                 <SelectTrigger className="w-full md:w-96"><SelectValue placeholder="Select behavior" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All behaviors</SelectItem>

@@ -801,10 +801,11 @@ export default function SettingsPage() {
           </div>
 
           <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" className="gap-2" disabled={clearConfirmation !== 'DELETE'}>
-                <Trash2 className="size-4" /> Clear all data
-              </Button>
+            <AlertDialogTrigger
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-destructive px-4 text-sm font-medium text-destructive-foreground shadow-xs transition-[color,box-shadow] outline-none hover:bg-destructive/90 disabled:pointer-events-none disabled:opacity-50"
+              disabled={clearConfirmation !== 'DELETE'}
+            >
+              <Trash2 className="size-4" /> Clear all data
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
