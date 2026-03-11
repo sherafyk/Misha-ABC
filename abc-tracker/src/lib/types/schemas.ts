@@ -38,3 +38,32 @@ export const quickLogSchema = z.object({
 })
 
 export type QuickLogValues = z.infer<typeof quickLogSchema>
+
+export const dailyLogSchema = z
+  .object({
+    log_date: z.string().min(1, 'Date is required'),
+    overall_mood: z.enum(['😊', '😐', '😟', '😠', '😴', '⚡']).nullable().optional(),
+    sleep_quality: z.enum(['Poor', 'Fair', 'Good', 'Excellent']).nullable().optional(),
+    sleep_hours: z
+      .number()
+      .min(0, 'Sleep hours cannot be negative')
+      .max(24, 'Sleep hours cannot exceed 24')
+      .nullable()
+      .optional(),
+    medication_given: z.boolean(),
+    medication_notes: z.string().max(1000).optional().or(z.literal('')),
+    diet_notes: z.string().max(2000).optional().or(z.literal('')),
+    general_notes: z.string().max(4000).optional().or(z.literal('')),
+    ai_formatted_summary: z.string().max(4000).optional().or(z.literal('')),
+  })
+  .superRefine((data, ctx) => {
+    if (data.medication_given && !data.medication_notes?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Medication notes are required when medication is marked as given',
+        path: ['medication_notes'],
+      })
+    }
+  })
+
+export type DailyLogFormValues = z.infer<typeof dailyLogSchema>
