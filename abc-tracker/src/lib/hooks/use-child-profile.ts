@@ -19,7 +19,7 @@ export function useChildProfile() {
 
     const supabase = createClient()
     const { data, error: fetchError } = await supabase
-      .from('child_profiles')
+      .from('child_profile')
       .select('*')
       .order('created_at', { ascending: true })
       .limit(1)
@@ -67,7 +67,7 @@ export function useUpdateChildProfile() {
     }
 
     const { data, error: upsertError } = await supabase
-      .from('child_profiles')
+      .from('child_profile')
       .upsert(payload, { onConflict: 'id' })
       .select('*')
       .single()
