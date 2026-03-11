@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
+import { adminMutate } from '@/lib/admin-client'
 import { createClient } from '@/lib/supabase/client'
 import type { DailyLog } from '@/lib/types/database'
 
@@ -38,17 +39,14 @@ export function useDailyLogs(dateRange?: { startDate?: string; endDate?: string 
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const { data, error: upsertError } = await supabase
-      .from('daily_logs')
-      .upsert(input, { onConflict: 'log_date' })
-      .select('*')
-      .single()
-
-    if (upsertError) {
-      setError(upsertError.message)
+    let data: DailyLog
+    try {
+      data = await adminMutate<DailyLog>('upsert_daily_log', input as Record<string, unknown>)
+    } catch (upsertError) {
+      const message = upsertError instanceof Error ? upsertError.message : 'Unable to save daily log'
+      setError(message)
       setLoading(false)
-      return { data: null, error: upsertError }
+      return { data: null, error: new Error(message) }
     }
 
     setDailyLogs((current) => {
@@ -93,21 +91,16 @@ export function useCreateDailyLog() {
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const { data, error: createError } = await supabase
-      .from('daily_logs')
-      .insert(input)
-      .select('*')
-      .single()
-
-    if (createError) {
-      setError(createError.message)
+    try {
+      const data = await adminMutate<DailyLog>('create_daily_log', input as Record<string, unknown>)
       setLoading(false)
-      return { data: null, error: createError }
+      return { data, error: null }
+    } catch (createError) {
+      const message = createError instanceof Error ? createError.message : 'Unable to create daily log'
+      setError(message)
+      setLoading(false)
+      return { data: null, error: new Error(message) }
     }
-
-    setLoading(false)
-    return { data: data as DailyLog, error: null }
   }, [])
 
   return { createDailyLog, loading, error }
@@ -121,22 +114,16 @@ export function useUpdateDailyLog() {
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const { data, error: updateError } = await supabase
-      .from('daily_logs')
-      .update(input)
-      .eq('id', id)
-      .select('*')
-      .single()
-
-    if (updateError) {
-      setError(updateError.message)
+    try {
+      const data = await adminMutate<DailyLog>('update_daily_log', { id, updates: input as Record<string, unknown> })
       setLoading(false)
-      return { data: null, error: updateError }
+      return { data, error: null }
+    } catch (updateError) {
+      const message = updateError instanceof Error ? updateError.message : 'Unable to update daily log'
+      setError(message)
+      setLoading(false)
+      return { data: null, error: new Error(message) }
     }
-
-    setLoading(false)
-    return { data: data as DailyLog, error: null }
   }, [])
 
   return { updateDailyLog, loading, error }

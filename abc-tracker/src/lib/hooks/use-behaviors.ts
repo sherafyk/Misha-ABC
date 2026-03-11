@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
+import { adminMutate } from '@/lib/admin-client'
 import { createClient } from '@/lib/supabase/client'
 import type { BehaviorDefinition } from '@/lib/types/database'
 
@@ -60,21 +61,16 @@ export function useCreateBehavior() {
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const { data, error: createError } = await supabase
-      .from('behavior_definitions')
-      .insert(input)
-      .select('*')
-      .single()
-
-    if (createError) {
-      setError(createError.message)
+    try {
+      const data = await adminMutate<BehaviorDefinition>('create_behavior', input as Record<string, unknown>)
       setLoading(false)
-      return { data: null, error: createError }
+      return { data, error: null }
+    } catch (createError) {
+      const message = createError instanceof Error ? createError.message : 'Unable to create behavior'
+      setError(message)
+      setLoading(false)
+      return { data: null, error: new Error(message) }
     }
-
-    setLoading(false)
-    return { data: data as BehaviorDefinition, error: null }
   }, [])
 
   return { createBehavior, loading, error }
@@ -88,22 +84,16 @@ export function useUpdateBehavior() {
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const { data, error: updateError } = await supabase
-      .from('behavior_definitions')
-      .update(input)
-      .eq('id', id)
-      .select('*')
-      .single()
-
-    if (updateError) {
-      setError(updateError.message)
+    try {
+      const data = await adminMutate<BehaviorDefinition>('update_behavior', { id, updates: input as Record<string, unknown> })
       setLoading(false)
-      return { data: null, error: updateError }
+      return { data, error: null }
+    } catch (updateError) {
+      const message = updateError instanceof Error ? updateError.message : 'Unable to update behavior'
+      setError(message)
+      setLoading(false)
+      return { data: null, error: new Error(message) }
     }
-
-    setLoading(false)
-    return { data: data as BehaviorDefinition, error: null }
   }, [])
 
   return { updateBehavior, loading, error }
@@ -117,20 +107,16 @@ export function useDeleteBehavior() {
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const { error: deleteError } = await supabase
-      .from('behavior_definitions')
-      .update({ is_active: false })
-      .eq('id', id)
-
-    if (deleteError) {
-      setError(deleteError.message)
+    try {
+      await adminMutate<{ id: string }>('archive_behavior', { id })
       setLoading(false)
-      return { error: deleteError }
+      return { error: null }
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : 'Unable to archive behavior'
+      setError(message)
+      setLoading(false)
+      return { error: new Error(message) }
     }
-
-    setLoading(false)
-    return { error: null }
   }, [])
 
   return { deleteBehavior, loading, error }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
+import { adminMutate } from '@/lib/admin-client'
 import { createClient } from '@/lib/supabase/client'
 import type { ChildProfile } from '@/lib/types/database'
 
@@ -60,26 +61,19 @@ export function useUpdateChildProfile() {
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const payload = {
-      ...input,
-      updated_at: new Date().toISOString(),
-    }
-
-    const { data, error: upsertError } = await supabase
-      .from('child_profile')
-      .upsert(payload, { onConflict: 'id' })
-      .select('*')
-      .single()
-
-    if (upsertError) {
-      setError(upsertError.message)
+    try {
+      const data = await adminMutate<ChildProfile>('upsert_child_profile', {
+        ...input,
+        updated_at: new Date().toISOString(),
+      })
       setLoading(false)
-      return { data: null, error: upsertError }
+      return { data, error: null }
+    } catch (upsertError) {
+      const message = upsertError instanceof Error ? upsertError.message : 'Unable to update profile'
+      setError(message)
+      setLoading(false)
+      return { data: null, error: new Error(message) }
     }
-
-    setLoading(false)
-    return { data: data as ChildProfile, error: null }
   }, [])
 
   return {

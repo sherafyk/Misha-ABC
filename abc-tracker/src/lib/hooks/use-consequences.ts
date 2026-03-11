@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
+import { adminMutate } from '@/lib/admin-client'
 import { createClient } from '@/lib/supabase/client'
 import type { ConsequenceOption, ConsequenceType } from '@/lib/types/database'
 
@@ -60,21 +61,16 @@ export function useCreateConsequence() {
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const { data, error: createError } = await supabase
-      .from('consequence_options')
-      .insert({ ...input, is_custom: true })
-      .select('*')
-      .single()
-
-    if (createError) {
-      setError(createError.message)
+    try {
+      const data = await adminMutate<ConsequenceOption>('create_consequence', input as Record<string, unknown>)
       setLoading(false)
-      return { data: null, error: createError }
+      return { data, error: null }
+    } catch (createError) {
+      const message = createError instanceof Error ? createError.message : 'Unable to create consequence'
+      setError(message)
+      setLoading(false)
+      return { data: null, error: new Error(message) }
     }
-
-    setLoading(false)
-    return { data: data as ConsequenceOption, error: null }
   }, [])
 
   return { createConsequence, loading, error }

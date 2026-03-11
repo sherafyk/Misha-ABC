@@ -26,11 +26,13 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { createClient } from '@/lib/supabase/client'
 import { useCreateAntecedent, useAntecedents } from '@/lib/hooks/use-antecedents'
 import { useBehaviors, useCreateBehavior, useDeleteBehavior, useUpdateBehavior } from '@/lib/hooks/use-behaviors'
 import { useChildProfile, useUpdateChildProfile } from '@/lib/hooks/use-child-profile'
 import { useCreateConsequence, useConsequences } from '@/lib/hooks/use-consequences'
+import { useAdminSession } from '@/lib/hooks/use-admin-session'
+import { AdminAccessCard } from '@/components/layout/admin-access-card'
+import { createClient } from '@/lib/supabase/client'
 import type { ConsequenceType } from '@/lib/types/database'
 
 type AIPreferences = {
@@ -57,6 +59,7 @@ const CONSEQUENCE_TYPES: ConsequenceType[] = [
 
 export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const { isAdmin, loading: adminLoading } = useAdminSession()
 
   const { profile, loading: profileLoading, refetch: refetchProfile } = useChildProfile()
   const { updateProfile, loading: savingProfile } = useUpdateChildProfile()
@@ -401,6 +404,14 @@ export default function SettingsPage() {
 
   const customAntecedents = antecedents.filter((item) => item.is_custom)
   const customConsequences = consequences.filter((item) => item.is_custom)
+
+  if (!isAdmin || adminLoading) {
+    return (
+      <main className="space-y-6 p-4 pb-24 md:p-6">
+        <AdminAccessCard title="Admin login required to edit settings" />
+      </main>
+    )
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 pb-28 md:p-6">
