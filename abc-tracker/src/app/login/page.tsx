@@ -13,8 +13,8 @@ import { Label } from '@/components/ui/label'
 import { parseJsonResponse } from '@/lib/http'
 
 const schema = z.object({
-  screenName: z.string().min(1, 'Screen name is required'),
-  pin: z.string().optional(),
+  email: z.string().email('Valid email is required'),
+  password: z.string().min(1, 'Password is required'),
 })
 
 type LoginValues = z.infer<typeof schema>
@@ -24,7 +24,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
-  const form = useForm<LoginValues>({ resolver: zodResolver(schema), defaultValues: { screenName: '', pin: '' } })
+  const form = useForm<LoginValues>({ resolver: zodResolver(schema), defaultValues: { email: '', password: '' } })
 
   const onSubmit = async (values: LoginValues) => {
     setError(null)
@@ -56,20 +56,23 @@ export default function LoginPage() {
       <Card className="w-full">
         <CardHeader>
           <CardTitle>Sign in to ABC Tracker</CardTitle>
-          <CardDescription>Use your assigned screen name and PIN.</CardDescription>
+          <CardDescription>Use your Supabase account email and password.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
             <div className="space-y-2">
-              <Label>Screen name</Label>
-              <Input autoComplete="username" {...form.register('screenName')} />
-              {form.formState.errors.screenName && (
-                <p className="text-sm text-red-600">{form.formState.errors.screenName.message}</p>
+              <Label>Email</Label>
+              <Input autoComplete="username" {...form.register('email')} />
+              {form.formState.errors.email && (
+                <p className="text-sm text-red-600">{form.formState.errors.email.message}</p>
               )}
             </div>
             <div className="space-y-2">
-              <Label>PIN</Label>
-              <Input type="password" autoComplete="current-password" {...form.register('pin')} />
+              <Label>Password</Label>
+              <Input type="password" autoComplete="current-password" {...form.register('password')} />
+              {form.formState.errors.password && (
+                <p className="text-sm text-red-600">{form.formState.errors.password.message}</p>
+              )}
             </div>
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
             <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</Button>

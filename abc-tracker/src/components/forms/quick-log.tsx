@@ -1,133 +1,112 @@
 'use client'
 
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
-import { useForm, useWatch } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
-import { SEVERITY_LEVELS, SETTINGS } from '@/lib/constants/abc-options'
+import { useAntecedents } from '@/lib/hooks/use-antecedents'
 import { useBehaviors } from '@/lib/hooks/use-behaviors'
+import { useConsequences } from '@/lib/hooks/use-consequences'
 import { useCreateIncident } from '@/lib/hooks/use-incidents'
 import { quickLogSchema, type QuickLogValues } from '@/lib/types/schemas'
-import type { BehaviorFunction, IncidentSetting } from '@/lib/types/database'
+import type { BehaviorFunction, BehaviorSeverity, IncidentSetting } from '@/lib/types/database'
+
+interface QuickLogParseResponse {
+  setting: IncidentSetting
+  severity: BehaviorSeverity
+  hypothesized_function: BehaviorFunction
+  behavior_id: string
+  antecedent_ids: string[]
+  consequence_ids: string[]
+  ai_formatted_notes: string
+}
 
 export function QuickLog() {
   const { behaviors } = useBehaviors()
+  const { antecedents } = useAntecedents()
+  const { consequences } = useConsequences()
   const { createIncident, loading } = useCreateIncident()
 
   const form = useForm<QuickLogValues>({
     resolver: zodResolver(quickLogSchema),
-    defaultValues: {
-      occurred_at: '',
-      behavior_id: '',
-      severity: 'medium',
-      setting: 'home',
-      parent_raw_notes: '',
-    },
+    defaultValues: { summary: '' },
   })
 
-
-  useEffect(() => {
-    const now = new Date()
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
-    form.setValue('occurred_at', now.toISOString().slice(0, 16))
-  }, [form])
-
-  const behaviorId = useWatch({ control: form.control, name: 'behavior_id' })
-  const severity = useWatch({ control: form.control, name: 'severity' })
-  const setting = useWatch({ control: form.control, name: 'setting' })
-
   const onSubmit = async (values: QuickLogValues) => {
-    const payload = {
-      occurred_at: new Date(values.occurred_at).toISOString(),
-      duration_seconds: null,
-      setting: values.setting as IncidentSetting,
-      setting_detail: null,
-      antecedent_ids: [],
-      antecedent_notes: null,
-      behavior_id: values.behavior_id,
-      behavior_notes: null,
-      severity: values.severity,
-      consequence_ids: [],
-      consequence_notes: null,
-      hypothesized_function: 'unknown' as BehaviorFunction,
-      parent_raw_notes: values.parent_raw_notes || null,
-      ai_formatted_notes: null,
-      people_present: null,
-      environmental_factors: null,
-      mood_before: null,
-    }
-
-    const { error } = await createIncident(payload)
-    if (error) {
-      toast.error(error.message ?? 'Unable to save quick log')
+    if (!behaviors.length) {
+      toast.error('No behaviors are configured yet. Ask an admin to add at least one behavior definition.')
       return
     }
 
-    toast.success('Quick log saved')
-    form.reset({ ...form.getValues(), parent_raw_notes: '' })
+    try {
+      const aiResponse = await fetch('/api/ai/quick-log-parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          summary: values.summary,
+          behaviors: behaviors.map((behavior) => ({ id: behavior.id, label: behavior.name })),
+          antecedents: antecedents.map((item) => ({ id: item.id, label: item.label })),
+          consequences: consequences.map((item) => ({ id: item.id, label: item.label })),
+        }),
+      })
+
+      const aiBody = (await aiResponse.json()) as QuickLogParseResponse & { error?: string }
+      if (!aiResponse.ok) {
+        throw new Error(aiBody.error ?? 'Unable to parse quick log with AI')
+      }
+
+      const payload = {
+        occurred_at: new Date().toISOString(),
+        duration_seconds: null,
+        setting: aiBody.setting,
+        setting_detail: null,
+        antecedent_ids: aiBody.antecedent_ids,
+        antecedent_notes: null,
+        behavior_id: aiBody.behavior_id,
+        behavior_notes: null,
+        severity: aiBody.severity,
+        consequence_ids: aiBody.consequence_ids,
+        consequence_notes: null,
+        hypothesized_function: aiBody.hypothesized_function,
+        parent_raw_notes: values.summary,
+        ai_formatted_notes: aiBody.ai_formatted_notes,
+        people_present: null,
+        environmental_factors: null,
+        mood_before: null,
+      }
+
+      const { error } = await createIncident(payload)
+      if (error) {
+        throw error
+      }
+
+      toast.success('Incident logged. AI filled in ABC details for you.')
+      form.reset({ summary: '' })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save quick log')
+    }
   }
 
   return (
     <Card className="rounded-2xl border-slate-200 shadow-sm">
       <CardHeader>
-        <CardTitle className="text-base">Quick Log</CardTitle>
+        <CardTitle className="text-base">Quick Caretaker Input</CardTitle>
+        <CardDescription>
+          Type what happened. We log the timestamp as now and AI maps your note to antecedent, behavior, and consequence options.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
-          <div>
-            <Label>Date & Time</Label>
-            <Input type="datetime-local" className="h-11" {...form.register('occurred_at')} />
-          </div>
-          <div>
-            <Label>Behavior</Label>
-            <Select value={behaviorId ?? ''} onValueChange={(value) => { if (value) form.setValue('behavior_id', value) }}>
-              <SelectTrigger className="h-11">
-                <SelectValue placeholder="Select behavior" />
-              </SelectTrigger>
-              <SelectContent>
-                {behaviors.map((behavior) => (
-                  <SelectItem key={behavior.id} value={behavior.id}>{behavior.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Severity</Label>
-              <Select value={severity ?? 'medium'} onValueChange={(value) => { if (value) form.setValue('severity', value as QuickLogValues['severity']) }}>
-                <SelectTrigger className="h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SEVERITY_LEVELS.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Setting</Label>
-              <Select value={setting ?? 'home'} onValueChange={(value) => { if (value) form.setValue('setting', value as QuickLogValues['setting']) }}>
-                <SelectTrigger className="h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SETTINGS.map((setting) => (
-                    <SelectItem key={setting.value} value={setting.value}>{setting.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <Textarea rows={3} placeholder="Brief notes" {...form.register('parent_raw_notes')} />
-          <Button className="h-11 w-full" disabled={loading} type="submit">Save Quick Log</Button>
+          <Textarea
+            rows={5}
+            placeholder="Example: During homework, I asked him to put the tablet away and he screamed and dropped to the floor. I redirected to breathing and after a minute he calmed down."
+            {...form.register('summary')}
+          />
+          {form.formState.errors.summary ? <p className="text-sm text-red-600">{form.formState.errors.summary.message}</p> : null}
+          <Button className="h-11 w-full" disabled={loading} type="submit">{loading ? 'Saving…' : 'Log incident now'}</Button>
         </form>
       </CardContent>
     </Card>

@@ -14,5 +14,6 @@ export async function GET() {
     role: session.role,
     screenName: session.screenName,
     appUserId: session.appUserId,
+    email: session.email,
   })
 }

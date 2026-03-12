@@ -30,11 +30,7 @@ export const incidentFormSchema = z.object({
 export type IncidentFormValues = z.input<typeof incidentFormSchema>
 
 export const quickLogSchema = z.object({
-  occurred_at: z.string().min(1, 'Date and time are required'),
-  behavior_id: z.string().min(1, 'Choose a behavior'),
-  severity: z.enum(['low', 'medium', 'high', 'crisis']),
-  setting: z.enum(settingValues as [string, ...string[]]),
-  parent_raw_notes: z.string().max(1000).optional().or(z.literal('')),
+  summary: z.string().min(3, 'Enter a quick summary').max(2000),
 })
 
 export type QuickLogValues = z.input<typeof quickLogSchema>

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { canMutateOperation, getAppSession } from '@/lib/app-session'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
   try {
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'You do not have permission for this action.' }, { status: 403 })
     }
 
-    const supabase = createAdminClient()
+    const supabase = await createClient()
 
     switch (operation) {
     case 'upsert_child_profile': {
