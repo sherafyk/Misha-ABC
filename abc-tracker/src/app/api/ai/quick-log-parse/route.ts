@@ -8,6 +8,7 @@ const optionSchema = z.object({ id: z.string().uuid(), label: z.string().min(1) 
 
 const requestSchema = z.object({
   summary: z.string().min(3),
+  occurred_at: z.string().datetime().optional(),
   behaviors: z.array(optionSchema).min(1),
   antecedents: z.array(optionSchema).default([]),
   consequences: z.array(optionSchema).default([]),
@@ -21,6 +22,7 @@ const responseSchema = z.object({
   antecedent_ids: z.array(z.string().uuid()),
   consequence_ids: z.array(z.string().uuid()),
   ai_formatted_notes: z.string().min(1),
+  occurred_at: z.string().datetime().optional(),
 })
 
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null
@@ -40,6 +42,7 @@ export async function POST(request: Request) {
         antecedent_ids: [],
         consequence_ids: [],
         ai_formatted_notes: body.summary,
+        occurred_at: body.occurred_at,
       })
     }
 
@@ -49,7 +52,7 @@ export async function POST(request: Request) {
         {
           role: 'system',
           content:
-            'You convert a caregiver free-text summary into structured ABC fields. Select IDs only from the provided options. Use 1 behavior_id, up to 3 antecedent_ids, up to 3 consequence_ids. Never invent IDs. Return strict JSON matching schema.',
+            'You convert a caregiver free-text summary into structured ABC fields. Select IDs only from the provided options. Use 1 behavior_id, up to 3 antecedent_ids, up to 3 consequence_ids. Never invent IDs. If the summary clearly states when the incident happened, include occurred_at in ISO 8601 with timezone. If timing is unclear, omit occurred_at. Return strict JSON matching schema.',
         },
         {
           role: 'user',
@@ -71,6 +74,7 @@ export async function POST(request: Request) {
               antecedent_ids: { type: 'array', items: { type: 'string' } },
               consequence_ids: { type: 'array', items: { type: 'string' } },
               ai_formatted_notes: { type: 'string' },
+              occurred_at: { type: 'string' },
             },
             required: ['setting', 'severity', 'hypothesized_function', 'behavior_id', 'antecedent_ids', 'consequence_ids', 'ai_formatted_notes'],
           },
@@ -92,6 +96,10 @@ export async function POST(request: Request) {
 
     parsed.antecedent_ids = parsed.antecedent_ids.filter((id) => body.antecedents.some((item) => item.id === id)).slice(0, 3)
     parsed.consequence_ids = parsed.consequence_ids.filter((id) => body.consequences.some((item) => item.id === id)).slice(0, 3)
+
+    if (!parsed.occurred_at) {
+      parsed.occurred_at = body.occurred_at
+    }
 
     return NextResponse.json(parsed)
   } catch (error) {
