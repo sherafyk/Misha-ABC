@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
+import { requireAppSession } from '@/lib/app-session'
 import { createClient } from '@/lib/supabase/server'
 
 const querySchema = z.object({
@@ -84,6 +85,8 @@ const normalizeForExport = (incident: ExportIncidentRow) => ({
 
 export async function GET(request: Request) {
   try {
+    await requireAppSession()
+
     const { searchParams } = new URL(request.url)
     const parsed = querySchema.parse(Object.fromEntries(searchParams.entries()))
 
@@ -121,6 +124,10 @@ export async function GET(request: Request) {
       },
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'Authentication required.') {
+      return NextResponse.json({ error: error.message }, { status: 401 })
+    }
+
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unable to export incidents.' },
       { status: 400 },

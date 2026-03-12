@@ -5,7 +5,7 @@ import { Lock, PlusCircle } from 'lucide-react'
 import Link from 'next/link'
 
 import { Badge } from '@/components/ui/badge'
-import { useAdminSession } from '@/lib/hooks/use-admin-session'
+import { useAuthSession } from '@/lib/hooks/use-auth-session'
 
 interface TopBarProps {
   childName: string
@@ -13,7 +13,7 @@ interface TopBarProps {
 
 export function TopBar({ childName }: TopBarProps) {
   const today = format(new Date(), 'EEEE, MMMM d')
-  const { isAdmin } = useAdminSession()
+  const { role, isAdmin } = useAuthSession()
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -24,7 +24,7 @@ export function TopBar({ childName }: TopBarProps) {
             <h1 className="text-lg font-semibold text-slate-900 md:text-2xl">{childName}&apos;s ABC Tracker</h1>
             <Badge variant={isAdmin ? 'default' : 'secondary'} className="gap-1">
               <Lock className="h-3 w-3" />
-              {isAdmin ? 'Admin editing' : 'Read-only'}
+              {role === 'admin' ? 'Admin' : 'Caretaker'}
             </Badge>
           </div>
         </div>
@@ -34,7 +34,7 @@ export function TopBar({ childName }: TopBarProps) {
           className="hidden h-11 items-center gap-2 rounded-xl bg-teal-500 px-5 text-sm font-medium text-white transition hover:bg-teal-600 md:inline-flex"
         >
           <PlusCircle className="h-5 w-5" />
-          {isAdmin ? 'Quick Log' : 'Admin Log In'}
+          {isAdmin ? 'Quick Log' : 'Open Log'}
         </Link>
       </div>
 

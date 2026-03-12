@@ -2,6 +2,8 @@ import OpenAI from 'openai'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 
+import { requireAppSession } from '@/lib/app-session'
+
 const requestSchema = z.object({
   antecedents: z.array(z.string()).default([]),
   behavior: z.string().optional(),
@@ -19,6 +21,8 @@ const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPE
 
 export async function POST(request: Request) {
   try {
+    await requireAppSession()
+
     const body = await request.json()
     const parsed = requestSchema.parse(body)
 
@@ -68,6 +72,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json(responseSchema.parse(JSON.parse(output)))
   } catch (error) {
+    if (error instanceof Error && error.message === 'Authentication required.') {
+      return NextResponse.json({ error: error.message }, { status: 401 })
+    }
+
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Unable to suggest function.',
