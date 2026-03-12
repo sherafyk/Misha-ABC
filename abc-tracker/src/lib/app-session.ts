@@ -26,11 +26,23 @@ export async function getAppSession(): Promise<AppSession | null> {
     return null
   }
 
-  const { data: appUser } = await supabase
+  const { data: appUser, error: appUserError } = await supabase
     .from('app_users')
     .select('id, screen_name, role')
     .eq('auth_user_id', user.id)
     .maybeSingle<AppUserRow>()
+
+  // Fall back to auth metadata if the app_users lookup is temporarily unavailable
+  // (e.g., before latest RLS migration is applied).
+  if (appUserError) {
+    return {
+      appUserId: user.id,
+      screenName: user.user_metadata?.screen_name ?? user.email ?? 'User',
+      role: user.app_metadata?.app_role === 'admin' ? 'admin' : 'caretaker',
+      authUserId: user.id,
+      email: user.email ?? null,
+    }
+  }
 
   const metadataRole = user.app_metadata?.app_role
   const role: AppRole = metadataRole === 'admin' ? 'admin' : 'caretaker'

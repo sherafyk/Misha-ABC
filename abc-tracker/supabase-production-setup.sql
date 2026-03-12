@@ -79,6 +79,18 @@ grant select on public.incident_consequences to anon, authenticated;
 grant select on public.daily_logs to anon, authenticated;
 grant select on public.ai_notes to anon, authenticated;
 
+
+
+-- 7b) Allow authenticated users to read their own app user row
+-- so role helper functions can resolve safely under RLS.
+drop policy if exists "users read own app user" on public.app_users;
+create policy "users read own app user" on public.app_users
+for select
+to authenticated
+using (auth.uid() = auth_user_id);
+
+grant select on public.app_users to authenticated;
+
 -- 8) Optional: create an admin-check helper for future Supabase Auth workflows
 create or replace function public.is_admin()
 returns boolean
