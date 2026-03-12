@@ -1,54 +1,22 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-
-import { parseJsonResponse } from '@/lib/http'
+import { useAuthSession } from '@/lib/hooks/use-auth-session'
 
 export function useAdminSession() {
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [configured, setConfigured] = useState(true)
-  const [loading, setLoading] = useState(true)
+  const session = useAuthSession()
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    const response = await fetch('/api/admin/session', { cache: 'no-store', credentials: 'include' })
-    const body = await parseJsonResponse<{ isAdmin?: boolean; configured?: boolean }>(response)
-    setIsAdmin(body?.isAdmin ?? false)
-    setConfigured(body?.configured ?? true)
-    setLoading(false)
-  }, [])
+  const login = async () => {
+    throw new Error('Admin password login has been replaced by user login at /login.')
+  }
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      void refresh()
-    }, 0)
-
-    return () => clearTimeout(timer)
-  }, [refresh])
-
-  const login = useCallback(
-    async (password: string) => {
-      const response = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ password }),
-      })
-
-      const body = await parseJsonResponse<{ error?: string }>(response)
-      if (!response.ok) {
-        throw new Error(body?.error ?? 'Unable to login')
-      }
-
-      await refresh()
-    },
-    [refresh],
-  )
-
-  const logout = useCallback(async () => {
-    await fetch('/api/admin/logout', { method: 'POST', credentials: 'include' })
-    await refresh()
-  }, [refresh])
-
-  return { isAdmin, configured, loading, login, logout, refresh }
+  return {
+    isAdmin: session.isAdmin,
+    configured: true,
+    loading: session.loading,
+    login,
+    logout: session.logout,
+    refresh: session.refresh,
+    role: session.role,
+    authenticated: session.authenticated,
+  }
 }

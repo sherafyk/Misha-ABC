@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 
+import { requireAppSession } from '@/lib/app-session'
 import type { BehaviorFunction, BehaviorSeverity, IncidentSetting } from '@/lib/types/database'
 
 const requestSchema = z.object({
@@ -25,6 +26,12 @@ const responseSchema = z.object({
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null
 
 export async function POST(request: Request) {
+  try {
+    await requireAppSession()
+  } catch {
+    return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
+  }
+
   if (!openai) {
     return NextResponse.json({ error: 'OPENAI_API_KEY is not configured.' }, { status: 503 })
   }

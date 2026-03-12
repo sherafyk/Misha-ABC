@@ -70,6 +70,10 @@ function NavLink({ item, pathname, mobile = false }: { item: NavItem; pathname: 
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
 
+  if (pathname === '/login') {
+    return <div className="min-h-screen bg-slate-50 text-slate-900">{children}</div>;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl">

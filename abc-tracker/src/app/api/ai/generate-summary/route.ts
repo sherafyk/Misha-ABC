@@ -2,6 +2,8 @@ import OpenAI from 'openai'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 
+import { requireAppSession } from '@/lib/app-session'
+
 const incidentSchema = z.object({
   occurred_at: z.string(),
   setting: z.string(),
@@ -35,6 +37,12 @@ const responseSchema = z.object({ summary: z.string().min(1) })
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null
 
 export async function POST(request: Request) {
+  try {
+    await requireAppSession()
+  } catch {
+    return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
+  }
+
   if (!openai) {
     return NextResponse.json({ error: 'OPENAI_API_KEY is not configured.' }, { status: 503 })
   }

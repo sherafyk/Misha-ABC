@@ -1,24 +1,27 @@
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
-import { getAdminSessionCookieName, isValidAdminSessionToken } from '@/lib/admin-auth'
+import { canMutateOperation, getAppSession } from '@/lib/app-session'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-async function requireAdmin() {
-  const cookieStore = await cookies()
-  const token = cookieStore.get(getAdminSessionCookieName())?.value
-  return isValidAdminSessionToken(token)
-}
-
 export async function POST(request: Request) {
-  if (!(await requireAdmin())) {
-    return NextResponse.json({ error: 'Admin login required.' }, { status: 403 })
-  }
+  try {
+    const session = await getAppSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
+    }
 
-  const { operation, payload } = (await request.json()) as { operation?: string; payload?: Record<string, unknown> }
-  const supabase = createAdminClient()
+    const { operation, payload } = (await request.json()) as { operation?: string; payload?: Record<string, unknown> }
+    if (!operation) {
+      return NextResponse.json({ error: 'Operation is required.' }, { status: 400 })
+    }
 
-  switch (operation) {
+    if (!canMutateOperation(session.role, operation)) {
+      return NextResponse.json({ error: 'You do not have permission for this action.' }, { status: 403 })
+    }
+
+    const supabase = createAdminClient()
+
+    switch (operation) {
     case 'upsert_child_profile': {
       const { data, error } = await supabase.from('child_profile').upsert(payload).select('*').single()
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
@@ -142,7 +145,13 @@ export async function POST(request: Request) {
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
       return NextResponse.json({ data: { id } })
     }
-    default:
-      return NextResponse.json({ error: 'Unsupported operation.' }, { status: 400 })
+      default:
+        return NextResponse.json({ error: 'Unsupported operation.' }, { status: 400 })
+    }
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Admin mutation failed.' },
+      { status: 500 },
+    )
   }
 }
