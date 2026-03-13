@@ -50,9 +50,11 @@ export default function ReportsPage() {
 
   const days = Number(range)
   const startDate = format(subDays(new Date(), days - 1), 'yyyy-MM-dd')
+  const incidentFilters = useMemo(() => ({ startDate }), [startDate])
+  const dailyLogRange = useMemo(() => ({ startDate }), [startDate])
 
-  const { incidents, loading, error } = useIncidents({ startDate })
-  const { dailyLogs } = useDailyLogs({ startDate })
+  const { incidents, loading, error } = useIncidents(incidentFilters)
+  const { dailyLogs } = useDailyLogs(dailyLogRange)
   const { behaviors } = useBehaviors()
 
   const filteredBehaviorIncidents = useMemo(
