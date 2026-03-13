@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Sparkles } from 'lucide-react'
 import { useForm } from 'react-hook-form'
@@ -23,7 +24,7 @@ import {
 import { useCreateAntecedent, useAntecedents } from '@/lib/hooks/use-antecedents'
 import { useBehaviors } from '@/lib/hooks/use-behaviors'
 import { useCreateConsequence, useConsequences } from '@/lib/hooks/use-consequences'
-import { useCreateIncident } from '@/lib/hooks/use-incidents'
+import { useCreateIncident, useIncident, useUpdateIncident } from '@/lib/hooks/use-incidents'
 import { createClient } from '@/lib/supabase/client'
 import { incidentFormSchema, type IncidentFormValues } from '@/lib/types/schemas'
 import type { BehaviorFunction, ConsequenceType, IncidentSetting } from '@/lib/types/database'
@@ -55,6 +56,10 @@ const initialValues: IncidentFormValues = {
 }
 
 export function IncidentForm() {
+  const searchParams = useSearchParams()
+  const editingIncidentId = searchParams.get('incidentId')
+  const isEditing = Boolean(editingIncidentId)
+
   const [step, setStep] = useState(0)
   const [peopleInput, setPeopleInput] = useState('')
   const [environmentInput, setEnvironmentInput] = useState('')
@@ -69,9 +74,12 @@ export function IncidentForm() {
   const { behaviors } = useBehaviors()
   const { antecedents, refetch: refetchAntecedents } = useAntecedents()
   const { consequences, refetch: refetchConsequences } = useConsequences()
-  const { createIncident, loading: saving } = useCreateIncident()
+  const { createIncident, loading: creating } = useCreateIncident()
+  const { updateIncident, loading: updating } = useUpdateIncident()
+  const { incident: editingIncident, loading: loadingEditIncident } = useIncident(editingIncidentId ?? undefined)
   const { createAntecedent } = useCreateAntecedent()
   const { createConsequence } = useCreateConsequence()
+  const saving = creating || updating
 
   useEffect(() => {
     const rawDraft = localStorage.getItem(DRAFT_KEY)
@@ -90,6 +98,40 @@ export function IncidentForm() {
     })
     return () => subscription.unsubscribe()
   }, [form])
+
+
+  useEffect(() => {
+    if (!isEditing || !editingIncident) return
+
+    const occurredAtLocal = new Date(new Date(editingIncident.occurred_at).getTime() - new Date().getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16)
+
+    form.reset({
+      occurred_at: occurredAtLocal,
+      setting: editingIncident.setting,
+      setting_detail: editingIncident.setting_detail ?? '',
+      duration_minutes: editingIncident.duration_seconds ? Math.floor(editingIncident.duration_seconds / 60) : 0,
+      duration_seconds_only: editingIncident.duration_seconds ? editingIncident.duration_seconds % 60 : 0,
+      antecedent_ids: editingIncident.antecedent_ids ?? [],
+      antecedent_notes: editingIncident.antecedent_notes ?? '',
+      behavior_id: editingIncident.behavior_id,
+      behavior_notes: editingIncident.behavior_notes ?? '',
+      severity: editingIncident.severity,
+      consequence_ids: editingIncident.consequence_ids ?? [],
+      consequence_notes: editingIncident.consequence_notes ?? '',
+      hypothesized_function: editingIncident.hypothesized_function,
+      people_present: editingIncident.people_present
+        ? editingIncident.people_present.split(',').map((value) => value.trim()).filter(Boolean)
+        : [],
+      environmental_factors: editingIncident.environmental_factors
+        ? editingIncident.environmental_factors.split(',').map((value) => value.trim()).filter(Boolean)
+        : [],
+      mood_before: editingIncident.mood_before ?? undefined,
+      parent_raw_notes: editingIncident.parent_raw_notes ?? '',
+      ai_formatted_notes: editingIncident.ai_formatted_notes ?? '',
+    })
+  }, [editingIncident, form, isEditing])
 
   const selectedBehavior = useMemo(
     () => behaviors.find((behavior) => behavior.id === form.watch('behavior_id')),
@@ -255,9 +297,12 @@ export function IncidentForm() {
       mood_before: values.mood_before || null,
     }
 
-    const { error } = await createIncident(payload)
-    if (error) {
-      toast.error(error.message ?? 'Unable to save incident.')
+    const result = isEditing && editingIncidentId
+      ? await updateIncident(editingIncidentId, payload)
+      : await createIncident(payload)
+
+    if (result.error) {
+      toast.error(result.error.message ?? `Unable to ${isEditing ? 'update' : 'save'} incident.`)
       return
     }
 
@@ -269,7 +314,7 @@ export function IncidentForm() {
       form.setValue('consequence_ids', normalizedConsequenceIds, { shouldDirty: true })
     }
 
-    toast.success('Incident saved successfully.')
+    toast.success(isEditing ? 'Incident updated successfully.' : 'Incident saved successfully.')
     await Promise.all([refetchAntecedents(), refetchConsequences()])
     localStorage.removeItem(DRAFT_KEY)
 
@@ -277,6 +322,10 @@ export function IncidentForm() {
       form.reset(initialValues)
       setStep(0)
       return
+    }
+
+    if (!isEditing) {
+      setStep(STEPS.length - 1)
     }
   }
 
@@ -375,7 +424,7 @@ export function IncidentForm() {
   return (
     <Card className="mx-auto max-w-4xl rounded-2xl border-slate-200 shadow-sm">
       <CardHeader>
-        <CardTitle className="text-xl">Log Incident</CardTitle>
+        <CardTitle className="text-xl">{isEditing ? 'Edit Incident' : 'Log Incident'}</CardTitle>
         <div className="flex items-center gap-2">
           {STEPS.map((label, index) => (
             <button
@@ -388,6 +437,7 @@ export function IncidentForm() {
           ))}
         </div>
         <p className="text-sm text-slate-600">Step {step + 1} of {STEPS.length}: {STEPS[step]}</p>
+        {isEditing ? <p className="text-xs text-blue-700">Editing existing incident details. Update fields and save your corrections.</p> : null}
       </CardHeader>
       <CardContent className="space-y-6">
         {step === 0 && (
@@ -638,14 +688,14 @@ export function IncidentForm() {
               </CardContent>
             </Card>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button className="h-12 flex-1" onClick={() => void form.handleSubmit(() => saveIncident(false))()} disabled={saving}>
-                Save Incident
+              <Button className="h-12 flex-1" onClick={() => void form.handleSubmit(() => saveIncident(false))()} disabled={saving || (isEditing && loadingEditIncident)}>
+                {isEditing ? 'Update Incident' : 'Save Incident'}
               </Button>
               <Button
                 className="h-12 flex-1"
                 variant="outline"
                 onClick={() => void form.handleSubmit(() => saveIncident(true))()}
-                disabled={saving}
+                disabled={saving || isEditing || (isEditing && loadingEditIncident)}
               >
                 Save & Log Another
               </Button>
