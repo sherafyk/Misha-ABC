@@ -1,11 +1,12 @@
 import { IncidentDetailClient } from './incident-detail-client'
 
 interface IncidentDetailPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
-export default function IncidentDetailPage({ params }: IncidentDetailPageProps) {
-  return <IncidentDetailClient id={params.id} />
+export default async function IncidentDetailPage({ params }: IncidentDetailPageProps) {
+  const { id } = await params
+  return <IncidentDetailClient id={id} />
 }

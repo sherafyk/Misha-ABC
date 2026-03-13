@@ -19,8 +19,8 @@ const responseSchema = z.object({
   severity: z.enum(['low', 'medium', 'high', 'crisis']),
   hypothesized_function: z.enum(['sensory', 'escape', 'attention', 'tangible', 'unknown']),
   behavior_id: z.string().uuid(),
-  antecedent_ids: z.array(z.string().uuid()),
-  consequence_ids: z.array(z.string().uuid()),
+  antecedent_ids: z.array(z.string().uuid()).max(1),
+  consequence_ids: z.array(z.string().uuid()).max(1),
   ai_formatted_notes: z.string().min(1),
   occurred_at: z.string().datetime(),
 })
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
         {
           role: 'system',
           content:
-            'You convert caregiver free-text into structured ABC fields. Select IDs only from the provided options. Use exactly 1 behavior_id, up to 3 antecedent_ids, and up to 3 consequence_ids. Never invent IDs. Always return occurred_at as an ISO 8601 datetime string with timezone. If the summary includes a date/time, parse and normalize it to ISO 8601. If timing is unclear, use the provided default_occurred_at value. Return strict JSON matching schema.',
+            'You convert caregiver free-text into structured ABC fields. Select IDs only from the provided options. Use exactly 1 behavior_id, exactly 1 antecedent_id, and exactly 1 consequence_id whenever options are provided. Never invent IDs. Always return occurred_at as an ISO 8601 datetime string with timezone. If the summary includes a date/time, parse and normalize it to ISO 8601. If timing is unclear, use the provided default_occurred_at value. Return strict JSON matching schema.',
         },
         {
           role: 'user',
@@ -104,8 +104,19 @@ export async function POST(request: Request) {
       parsed.behavior_id = body.behaviors[0].id
     }
 
-    parsed.antecedent_ids = parsed.antecedent_ids.filter((id) => body.antecedents.some((item) => item.id === id)).slice(0, 3)
-    parsed.consequence_ids = parsed.consequence_ids.filter((id) => body.consequences.some((item) => item.id === id)).slice(0, 3)
+    const validAntecedents = parsed.antecedent_ids.filter((id) => body.antecedents.some((item) => item.id === id))
+    const validConsequences = parsed.consequence_ids.filter((id) => body.consequences.some((item) => item.id === id))
+
+    parsed.antecedent_ids = validAntecedents.slice(0, 1)
+    parsed.consequence_ids = validConsequences.slice(0, 1)
+
+    if (!parsed.antecedent_ids.length && body.antecedents.length) {
+      parsed.antecedent_ids = [body.antecedents[0].id]
+    }
+
+    if (!parsed.consequence_ids.length && body.consequences.length) {
+      parsed.consequence_ids = [body.consequences[0].id]
+    }
 
     if (!parsed.occurred_at) {
       parsed.occurred_at = defaultOccurredAt
