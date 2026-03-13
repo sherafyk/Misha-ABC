@@ -22,7 +22,7 @@ const responseSchema = z.object({
   antecedent_ids: z.array(z.string().uuid()),
   consequence_ids: z.array(z.string().uuid()),
   ai_formatted_notes: z.string().min(1),
-  occurred_at: z.string().datetime().optional(),
+  occurred_at: z.string().datetime(),
 })
 
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null
@@ -32,6 +32,7 @@ export async function POST(request: Request) {
     await requireAppSession()
 
     const body = requestSchema.parse(await request.json())
+    const defaultOccurredAt = body.occurred_at ?? new Date().toISOString()
 
     if (!openai) {
       return NextResponse.json({
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
         antecedent_ids: [],
         consequence_ids: [],
         ai_formatted_notes: body.summary,
-        occurred_at: body.occurred_at,
+        occurred_at: defaultOccurredAt,
       })
     }
 
@@ -52,11 +53,11 @@ export async function POST(request: Request) {
         {
           role: 'system',
           content:
-            'You convert a caregiver free-text summary into structured ABC fields. Select IDs only from the provided options. Use 1 behavior_id, up to 3 antecedent_ids, up to 3 consequence_ids. Never invent IDs. If the summary clearly states when the incident happened, include occurred_at in ISO 8601 with timezone. If timing is unclear, omit occurred_at. Return strict JSON matching schema.',
+            'You convert caregiver free-text into structured ABC fields. Select IDs only from the provided options. Use exactly 1 behavior_id, up to 3 antecedent_ids, and up to 3 consequence_ids. Never invent IDs. Always return occurred_at as an ISO 8601 datetime string with timezone. If the summary includes a date/time, parse and normalize it to ISO 8601. If timing is unclear, use the provided default_occurred_at value. Return strict JSON matching schema.',
         },
         {
           role: 'user',
-          content: JSON.stringify(body),
+          content: JSON.stringify({ ...body, default_occurred_at: defaultOccurredAt }),
         },
       ],
       text: {
@@ -76,7 +77,16 @@ export async function POST(request: Request) {
               ai_formatted_notes: { type: 'string' },
               occurred_at: { type: 'string' },
             },
-            required: ['setting', 'severity', 'hypothesized_function', 'behavior_id', 'antecedent_ids', 'consequence_ids', 'ai_formatted_notes'],
+            required: [
+              'setting',
+              'severity',
+              'hypothesized_function',
+              'behavior_id',
+              'antecedent_ids',
+              'consequence_ids',
+              'ai_formatted_notes',
+              'occurred_at',
+            ],
           },
         },
       },
@@ -98,7 +108,7 @@ export async function POST(request: Request) {
     parsed.consequence_ids = parsed.consequence_ids.filter((id) => body.consequences.some((item) => item.id === id)).slice(0, 3)
 
     if (!parsed.occurred_at) {
-      parsed.occurred_at = body.occurred_at
+      parsed.occurred_at = defaultOccurredAt
     }
 
     return NextResponse.json(parsed)
