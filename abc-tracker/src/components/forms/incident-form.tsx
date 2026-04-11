@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Sparkles } from 'lucide-react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -71,6 +71,10 @@ export function IncidentForm() {
     defaultValues: initialValues,
   })
 
+  const watchedBehaviorId = useWatch({ control: form.control, name: 'behavior_id' })
+  const watchedAntecedentIds = useWatch({ control: form.control, name: 'antecedent_ids' }) ?? []
+  const watchedConsequenceIds = useWatch({ control: form.control, name: 'consequence_ids' }) ?? []
+
   const { behaviors } = useBehaviors()
   const { antecedents, refetch: refetchAntecedents } = useAntecedents()
   const { consequences, refetch: refetchConsequences } = useConsequences()
@@ -134,8 +138,8 @@ export function IncidentForm() {
   }, [editingIncident, form, isEditing])
 
   const selectedBehavior = useMemo(
-    () => behaviors.find((behavior) => behavior.id === form.watch('behavior_id')),
-    [behaviors, form],
+    () => behaviors.find((behavior) => behavior.id === watchedBehaviorId),
+    [behaviors, watchedBehaviorId],
   )
 
   const antecedentOptions = useMemo(() => {
@@ -361,9 +365,13 @@ export function IncidentForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          antecedents: antecedents.filter((item) => values.antecedent_ids.includes(item.id)).map((item) => item.label),
+          antecedents: antecedentOptions
+            .filter((item) => values.antecedent_ids.includes(item.id))
+            .map((item) => item.label),
           behavior: selectedBehavior?.name,
-          consequences: consequences.filter((item) => values.consequence_ids.includes(item.id)).map((item) => item.label),
+          consequences: consequenceOptions
+            .filter((item) => values.consequence_ids.includes(item.id))
+            .map((item) => item.label),
           severity: values.severity,
           setting: values.setting as IncidentSetting,
           parent_raw_notes: values.parent_raw_notes,
@@ -481,7 +489,7 @@ export function IncidentForm() {
                 <Button
                   key={item.id}
                   type="button"
-                  variant={form.watch('antecedent_ids').includes(item.id) ? 'default' : 'outline'}
+                  variant={watchedAntecedentIds.includes(item.id) ? 'default' : 'outline'}
                   className="h-11"
                   onClick={() => toggleSelection('antecedent_ids', item.id)}
                 >
@@ -502,7 +510,7 @@ export function IncidentForm() {
                 <Button
                   key={behavior.id}
                   type="button"
-                  variant={form.watch('behavior_id') === behavior.id ? 'default' : 'outline'}
+                  variant={watchedBehaviorId === behavior.id ? 'default' : 'outline'}
                   className="h-12 justify-start"
                   onClick={() => form.setValue('behavior_id', behavior.id, { shouldValidate: true })}
                 >
@@ -535,7 +543,7 @@ export function IncidentForm() {
                 <Button
                   key={item.id}
                   type="button"
-                  variant={form.watch('consequence_ids').includes(item.id) ? 'default' : 'outline'}
+                  variant={watchedConsequenceIds.includes(item.id) ? 'default' : 'outline'}
                   className="h-11"
                   onClick={() => toggleSelection('consequence_ids', item.id)}
                 >

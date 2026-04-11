@@ -6,7 +6,11 @@ const PUBLIC_PATHS = new Set(['/login'])
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  if (pathname.startsWith('/_next') || pathname.startsWith('/api/auth') || pathname === '/favicon.ico') {
+  if (
+    pathname.startsWith('/_next')
+    || pathname.startsWith('/api')
+    || pathname === '/favicon.ico'
+  ) {
     return NextResponse.next()
   }
 
@@ -17,7 +21,7 @@ export async function middleware(request: NextRequest) {
   if (!supabaseUrl || !supabaseAnonKey) {
     if (pathname !== '/login') {
       const loginUrl = new URL('/login', request.url)
-      loginUrl.searchParams.set('next', pathname)
+      loginUrl.searchParams.set('next', `${pathname}${request.nextUrl.search}`)
       return NextResponse.redirect(loginUrl)
     }
 
@@ -53,7 +57,7 @@ export async function middleware(request: NextRequest) {
 
   if (!user && !PUBLIC_PATHS.has(pathname)) {
     const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('next', pathname)
+    loginUrl.searchParams.set('next', `${pathname}${request.nextUrl.search}`)
     return NextResponse.redirect(loginUrl)
   }
 

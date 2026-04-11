@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { endOfMonth, endOfWeek, formatISO, startOfMonth, startOfToday, startOfWeek, subDays } from 'date-fns'
+import { endOfDay, endOfMonth, endOfWeek, formatISO, startOfDay, startOfMonth, startOfToday, startOfWeek, subDays } from 'date-fns'
 import { Search, X } from 'lucide-react'
 
 import { IncidentCard } from '@/components/cards/incident-card'
@@ -35,8 +35,8 @@ function withinDatePreset(incident: Incident, preset: DatePreset, customStart: s
     return occurred >= startOfMonth(new Date()) && occurred <= endOfMonth(new Date())
   }
 
-  if (customStart && occurred < new Date(customStart)) return false
-  if (customEnd && occurred > new Date(customEnd)) return false
+  if (customStart && occurred < startOfDay(new Date(customStart))) return false
+  if (customEnd && occurred > endOfDay(new Date(customEnd))) return false
   return true
 }
 
