@@ -55,6 +55,8 @@ const REPEATED_BEHAVIOR_PRESET = {
   parentRawNotes: 'Calms down shortly after, generally lasts less than 1 minute.',
 } as const
 
+const FALLBACK_ANTECEDENT_LABEL = 'Preferred item/activity removed'
+
 function findByLabel<T extends { label?: string; name?: string }>(items: T[], label: string): T | undefined {
   const normalized = label.trim().toLowerCase()
   return items.find((item) => (item.label ?? item.name ?? '').trim().toLowerCase() === normalized)
@@ -81,18 +83,12 @@ export function QuickLog() {
       return
     }
 
-    let antecedent = findByLabel<AntecedentOption>(antecedents, REPEATED_BEHAVIOR_PRESET.antecedentLabel)
+    const antecedent =
+      findByLabel<AntecedentOption>(antecedents, REPEATED_BEHAVIOR_PRESET.antecedentLabel) ??
+      findByLabel<AntecedentOption>(antecedents, FALLBACK_ANTECEDENT_LABEL)
     if (!antecedent) {
-      const { data, error } = await createAntecedent({
-        label: REPEATED_BEHAVIOR_PRESET.antecedentLabel,
-        category: REPEATED_BEHAVIOR_PRESET.antecedentCategory,
-      })
-      if (error || !data) {
-        toast.error(error?.message ?? `Unable to create antecedent "${REPEATED_BEHAVIOR_PRESET.antecedentLabel}".`)
-        return
-      }
-
-      antecedent = data
+      toast.error('No antecedent options are available. Please add one in Settings.')
+      return
     }
 
     const consequence = findByLabel<ConsequenceOption>(consequences, REPEATED_BEHAVIOR_PRESET.consequenceLabel)
@@ -107,7 +103,10 @@ export function QuickLog() {
       setting: REPEATED_BEHAVIOR_PRESET.setting,
       setting_detail: null,
       antecedent_ids: [antecedent.id],
-      antecedent_notes: null,
+      antecedent_notes:
+        antecedent.label === REPEATED_BEHAVIOR_PRESET.antecedentLabel
+          ? null
+          : `${REPEATED_BEHAVIOR_PRESET.antecedentLabel} (${REPEATED_BEHAVIOR_PRESET.antecedentCategory})`,
       behavior_id: behavior.id,
       behavior_notes: REPEATED_BEHAVIOR_PRESET.behaviorNotes,
       severity: REPEATED_BEHAVIOR_PRESET.severity,
@@ -124,6 +123,10 @@ export function QuickLog() {
     if (error) {
       toast.error(error.message)
       return
+    }
+
+    if (antecedent.label !== REPEATED_BEHAVIOR_PRESET.antecedentLabel) {
+      toast.info(`Saved using "${antecedent.label}" plus notes because the exact antecedent is not available.`)
     }
 
     toast.success('Repeated tantrum incident logged.')
