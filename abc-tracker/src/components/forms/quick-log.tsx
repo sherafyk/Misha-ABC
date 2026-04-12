@@ -19,7 +19,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
-import { useAntecedents } from '@/lib/hooks/use-antecedents'
+import { useAntecedents, useCreateAntecedent } from '@/lib/hooks/use-antecedents'
 import { useBehaviors } from '@/lib/hooks/use-behaviors'
 import { useConsequences } from '@/lib/hooks/use-consequences'
 import { useCreateIncident, useUpdateIncident } from '@/lib/hooks/use-incidents'
@@ -65,6 +65,7 @@ function findByLabel<T extends { label?: string; name?: string }>(items: T[], la
 export function QuickLog() {
   const { behaviors } = useBehaviors()
   const { antecedents } = useAntecedents()
+  const { createAntecedent, loading: creatingAntecedent } = useCreateAntecedent()
   const { consequences } = useConsequences()
   const { createIncident, loading: creatingIncident } = useCreateIncident()
   const { updateIncident, loading: updatingIncident } = useUpdateIncident()
@@ -218,7 +219,7 @@ export function QuickLog() {
     }
   }
 
-  const isSubmitting = creatingIncident || updatingIncident || isParsing
+  const isSubmitting = creatingIncident || updatingIncident || isParsing || creatingAntecedent
 
   return (
     <Card className="rounded-2xl border-slate-200 shadow-sm">
