@@ -5,14 +5,26 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
-import { useAntecedents } from '@/lib/hooks/use-antecedents'
+import { useAntecedents, useCreateAntecedent } from '@/lib/hooks/use-antecedents'
 import { useBehaviors } from '@/lib/hooks/use-behaviors'
 import { useConsequences } from '@/lib/hooks/use-consequences'
 import { useCreateIncident, useUpdateIncident } from '@/lib/hooks/use-incidents'
 import { quickLogSchema, type QuickLogValues } from '@/lib/types/schemas'
+import type { AntecedentOption, BehaviorDefinition, ConsequenceOption } from '@/lib/types/database'
 import type { BehaviorFunction, BehaviorSeverity, IncidentSetting } from '@/lib/types/database'
 
 interface QuickLogParseResponse {
@@ -26,9 +38,32 @@ interface QuickLogParseResponse {
   ai_formatted_notes: string
 }
 
+const REPEATED_BEHAVIOR_PRESET = {
+  id: 'repeat-tantrum-after-drop',
+  label: 'Repeat: Tantrum after dropped toy',
+  details:
+    "Logs now at Home for 1 minute with antecedent “Accidentally dropped toy or item”, behavior “Tantrum” (Low), and attention-based consequence.",
+  setting: 'home' as const,
+  durationSeconds: 60,
+  antecedentLabel: 'Accidentally dropped toy or item',
+  antecedentCategory: 'environmental',
+  behaviorLabel: 'Tantrum',
+  behaviorNotes:
+    "Playing with toy and it fell from child's hands. Threw a mild tantrum, mostly verbal/yelling.",
+  severity: 'low' as const,
+  consequenceLabel: 'Attention provided (comfort, discussion)',
+  parentRawNotes: 'Calms down shortly after, generally lasts less than 1 minute.',
+} as const
+
+function findByLabel<T extends { label?: string; name?: string }>(items: T[], label: string): T | undefined {
+  const normalized = label.trim().toLowerCase()
+  return items.find((item) => (item.label ?? item.name ?? '').trim().toLowerCase() === normalized)
+}
+
 export function QuickLog() {
   const { behaviors } = useBehaviors()
   const { antecedents } = useAntecedents()
+  const { createAntecedent, loading: creatingAntecedent } = useCreateAntecedent()
   const { consequences } = useConsequences()
   const { createIncident, loading: creatingIncident } = useCreateIncident()
   const { updateIncident, loading: updatingIncident } = useUpdateIncident()
@@ -38,6 +73,61 @@ export function QuickLog() {
     resolver: zodResolver(quickLogSchema),
     defaultValues: { summary: '' },
   })
+
+  const createPresetIncident = async () => {
+    const behavior = findByLabel<BehaviorDefinition>(behaviors, REPEATED_BEHAVIOR_PRESET.behaviorLabel)
+    if (!behavior) {
+      toast.error(`Behavior "${REPEATED_BEHAVIOR_PRESET.behaviorLabel}" is missing. Add it in Settings before using this quick button.`)
+      return
+    }
+
+    let antecedent = findByLabel<AntecedentOption>(antecedents, REPEATED_BEHAVIOR_PRESET.antecedentLabel)
+    if (!antecedent) {
+      const { data, error } = await createAntecedent({
+        label: REPEATED_BEHAVIOR_PRESET.antecedentLabel,
+        category: REPEATED_BEHAVIOR_PRESET.antecedentCategory,
+      })
+      if (error || !data) {
+        toast.error(error?.message ?? `Unable to create antecedent "${REPEATED_BEHAVIOR_PRESET.antecedentLabel}".`)
+        return
+      }
+
+      antecedent = data
+    }
+
+    const consequence = findByLabel<ConsequenceOption>(consequences, REPEATED_BEHAVIOR_PRESET.consequenceLabel)
+    if (!consequence) {
+      toast.error(`Consequence "${REPEATED_BEHAVIOR_PRESET.consequenceLabel}" is missing. Ask an admin to seed default consequences.`)
+      return
+    }
+
+    const { error } = await createIncident({
+      occurred_at: new Date().toISOString(),
+      duration_seconds: REPEATED_BEHAVIOR_PRESET.durationSeconds,
+      setting: REPEATED_BEHAVIOR_PRESET.setting,
+      setting_detail: null,
+      antecedent_ids: [antecedent.id],
+      antecedent_notes: null,
+      behavior_id: behavior.id,
+      behavior_notes: REPEATED_BEHAVIOR_PRESET.behaviorNotes,
+      severity: REPEATED_BEHAVIOR_PRESET.severity,
+      consequence_ids: [consequence.id],
+      consequence_notes: null,
+      hypothesized_function: 'unknown',
+      parent_raw_notes: REPEATED_BEHAVIOR_PRESET.parentRawNotes,
+      ai_formatted_notes: null,
+      people_present: null,
+      environmental_factors: null,
+      mood_before: null,
+    })
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    toast.success('Repeated tantrum incident logged.')
+  }
 
   const onSubmit = async (values: QuickLogValues) => {
     if (!behaviors.length) {
@@ -126,7 +216,7 @@ export function QuickLog() {
     }
   }
 
-  const isSubmitting = creatingIncident || updatingIncident || isParsing
+  const isSubmitting = creatingIncident || updatingIncident || isParsing || creatingAntecedent
 
   return (
     <Card className="rounded-2xl border-slate-200 shadow-sm">
@@ -137,6 +227,29 @@ export function QuickLog() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">One-tap repeated incidents</p>
+          <AlertDialog>
+            <AlertDialogTrigger
+              disabled={isSubmitting}
+              render={<Button className="h-11 w-full justify-start" type="button" variant="secondary" />}
+            >
+              {REPEATED_BEHAVIOR_PRESET.label}
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Log this repeated incident now?</AlertDialogTitle>
+                <AlertDialogDescription>{REPEATED_BEHAVIOR_PRESET.details}</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction disabled={isSubmitting} onClick={() => void createPresetIncident()}>
+                  {isSubmitting ? 'Logging…' : 'Confirm & log'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
         <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
           <Textarea
             rows={5}
